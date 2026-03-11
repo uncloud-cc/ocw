@@ -2,19 +2,21 @@
 
 ocw is a simple to use workflow engine that lets you build workflows out of containers.
 
-Workflows essentially do just two things: **Build containers** and **run containers** - that's pretty much it. Everything else around it is just to make your life easier.
+Workflows\* essentially do just two things: **Build containers** and **run containers** - that's pretty much it. Everything else around it is just to make your life easier.
 
 ocw is also designed for security with _immutable workspaces_, _outgoing network filters_, is configured to be _jailbreak-proof_, runs _rootless_ and it built on top of [Podman](https://podman.io/) which is an open-source container runtime built with security in mind.
 
 > **At the moment ocw is still in early stages** and many of the security features aren't implemented yet!
 
+> (\*) When we talk about _workflows_ in the context of these docs we almost always mean _ocw workflows_. But since you're a smart 🍪 you probably already knew that :)
+
 ## Setup
 
-Before we jump in, you need to install three things on your local machine
+Before we jump in, you need to install three things on your local machine to get started:
 
 - [Podman](https://podman.io/docs/installation) it's an open-source container runtime that's secure by design
 - [Go](https://go.dev/dl/) for being able to run the `ocw cli`
-- [ocw cli](../../README.md#install) for running ocw workflows → Just run `go install github.com/
+- [ocw cli](../../README.md#install) for running ocw workflows → Just run `go install github.com/opencontainerworkflow/ocw/cmd`
 
 ## Hello World!
 
@@ -50,13 +52,13 @@ Go ahead and run it: `ocw hello-world.yaml` - you should see something like this
 ────────────────────────────────────────────────────────────
 ```
 
-Congrats! You just created your first ocw workflow ✨
+Congrats! You just created and ran your first ocw workflow ✨
 
-Workflows can run steps in a `sequence`, in `parallel` or based on conditions using `switch / case`. And yes you can nest these as needed.
+Workflows can run steps as a `sequence`, in `parallel` or based on conditions using `switch / case`. And yes you can nest these as needed.
 
 But we're getting ahead of ourselves - let's build a container next!
 
-> **Example not working?** Double check that you added the podman & go to your `$PATH` by checking your `~/.bashrc` or `~/.zshrc` for options similar to this:
+> **Example not working?** Double check that you added podman & go to your `$PATH` by checking your `~/.bashrc` or `~/.zshrc` for options similar to this:
 >
 > ```bash
 > # Your ~/.bashrc or ~/.zshrc should contain something like this:
@@ -71,7 +73,7 @@ But we're getting ahead of ourselves - let's build a container next!
 
 ## Building a container
 
-Another key element of ocw is to _build_ containers. Let's first create a sinmple Dockerfile - it will just output "Hello World" again:
+Another key element of ocw is to _build_ containers. Let's first create a simple Dockerfile - it will just output "Hello World" again:
 
 ```Dockerfile
 FROM alpine:latest
@@ -126,11 +128,11 @@ sequence:
       NAME: ocw 🤖
 ```
 
-Go ahead! `ocw build-and-run.yaml`.
+Go ahead and run it 👉🏻 `ocw build-and-run.yaml`.
 
 Couple of new things to notice here: We added an `id` to the build-step, allowing us to reference it in the next step using `{{ steps.build.image }}` (more on templating in the advanced tutorial).
 
-Notice how we're also setting an environment variable for this container using `env`. Go ahead and set a different `NAME` and re-run the example!
+Notice how we're also setting an environment variable for this container using `env`. Go ahead and set a different `NAME` and rerun the example!
 
 ## What's Next?
 
@@ -140,7 +142,8 @@ Good job, working through the basics. Next, go to the [advanced tutorial](../adv
 - Parallel steps
 - Conditionals (switch / case)
 - Building reusable jobs
-- Exposing containers
+- Exposing containers (for local development)
+- And more!
 
 **Got feedback?**\
 [Join the community on Github](https://github.com/opencontainerworkflow/ocw/discussions) to ask questions, get help and share feedback.
