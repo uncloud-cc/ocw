@@ -1,2 +1,1 @@
-# ocw
-Open Container Workflow (ocw)
+# Open Container Workflow (ocw)
