@@ -214,7 +214,7 @@ Runs a container. The workflow directory is mounted at `/workflow`.
   args: ["--coverage"]       # command arguments
   entrypoint: /bin/sh       # override entrypoint
   workdir: /workspace/app   # working directory (default: /workflow)
-  
+
   # Background execution
   background: true
   healthCheck:
@@ -224,21 +224,21 @@ Runs a container. The workflow directory is mounted at `/workflow`.
     retries: 15
     startPeriod: 10s
   expose: 8080
-  
+
   # Environment
   env:
     NODE_ENV: test
   envFile: .env.test        # or [.env, .env.local]
-  
+
   # Resources
   cpus: 2
   memory: 2g
   gpus: 1                   # or "all"
-  
+
   # Image handling
   pull: always              # always | missing | never
   platform: linux/amd64
-  
+
   # Output control
   quiet: true
   tty: true
@@ -281,24 +281,24 @@ Builds a container image using Podman/Buildah.
     # Core options
     image: myapp:latest       # required, primary tag
     context: /workspace         # build context (default: /workspace)
-    
+
     # Dockerfile
     dockerfile: Dockerfile    # path to Dockerfile
     target: production        # multi-stage target
-    
+
     # Build arguments
     buildArgs:
       NODE_ENV: production
-    
+
     # Platform
     platform: linux/amd64     # or [linux/amd64, linux/arm64]
-    
+
     # Caching
     cacheFrom: [myapp:cache]
     cacheTo: [type=registry, ref=myapp:cache]
     noCache: false
     noCacheFilter: [stage1]
-    
+
     # Tags and output
     tags:
       - myapp:v1.0
@@ -306,43 +306,43 @@ Builds a container image using Podman/Buildah.
     output:
       type: docker
       dest: /tmp/image.tar
-    
+
     # Push/Load
     push: true
     load: true
-    
+
     # Base image
     pull: true
-    
+
     # Secrets
     secrets:
       npm_token: "{{env.NPM_TOKEN}}"
-    
+
     # Labels
     labels:
       version: "1.0"
     annotation:
       org.opencontainers.image.source: https://github.com/...
-    
+
     # Resources
     shmSize: 128m
     ulimit:
       nofile: 1024:2048
-    
+
     # Progress
     progress: plain           # auto | quiet | plain | tty | rawjson
     quiet: false
-    
+
     # Attestations
     provenance: true          # or "min"
     sbom: true                # or "generator=syft"
     attest:
       - type=provenance,disabled=true
-    
+
     # Metadata
     metadataFile: /tmp/meta.json
     iidfile: /tmp/image-id.txt
-    
+
     # Additional contexts
     buildContext:
       alpine: docker-image://alpine:latest
@@ -460,12 +460,12 @@ Environment variables cascade: workflow → job → step (later overrides earlie
 env:
   # Plain value
   NODE_ENV: production
-  
+
   # Secret with default
   DB_PASSWORD:
     secret: true
     default: changeme
-  
+
   # Secret without default (must be in .env file)
   API_KEY:
     secret: true
