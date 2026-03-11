@@ -1,0 +1,145 @@
+# .ocw/pr.yaml
+schemaVersion: "0.1.0"
+name: Pull Request CI
+description: Pull request CI workflow with linting, type checking, and tests
+
+config:
+  ocw:
+    on: [pull_request]
+    cpu: 16
+    ram: 64
+
+jobs:
+  # Quick checks that run fast
+  lint:
+    name: Lint & Type Check
+    parallel:
+      - name: Prettier
+        image: node:20-alpine
+        cmd: npx prettier . --check
+
+      - name: ESLint
+        image: node:20-alpine
+        cmd: npx eslint . --max-warnings=0
+
+      - name: Type Check
+        image: node:20-alpine
+        cmd: npx tsc --noEmit
+
+      - name: Dependency Audit
+        image: node:20-alpine
+        cmd: npm audit --audit-level=high
+
+      - name: License Check
+        image: node:20-alpine
+        cmd: npx license-checker --production --onlyAllow 'MIT;ISC;Apache-2.0'
+
+  # Unit tests
+  test_unit:
+    name: Unit Tests
+    sequence:
+      - name: Unit Tests
+        image: node:20-alpine
+        cmd: npm ci && npm run test:unit -- --ci
+
+  # Integration tests with databases
+  test_integration:
+    name: Integration Tests
+    sequence:
+      - parallel:
+          - name: PostgreSQL
+            image: postgres:16-alpine
+            env:
+              POSTGRES_USER: test
+              POSTGRES_PASSWORD: test
+              POSTGRES_DB: app_test
+
+          - name: Redis
+            image: redis:7-alpine
+
+          - name: NATS
+            image: nats:2-alpine
+            cmd: nats-server -js
+
+      - name: Integration Tests
+        image: node:20-alpine
+        env:
+          DATABASE_URL: postgres://test:test@localhost:5432/app_test
+          REDIS_URL: redis://localhost:6379
+          NATS_URL: nats://localhost:4222
+        cmd: npm ci && npm run test:integration -- --ci
+
+  # E2E tests
+  test_e2e:
+    name: E2E Tests
+    sequence:
+      - parallel:
+          - name: PostgreSQL
+            image: postgres:16-alpine
+            env:
+              POSTGRES_USER: test
+              POSTGRES_PASSWORD: test
+              POSTGRES_DB: app_test
+
+          - name: Redis
+            image: redis:7-alpine
+
+          - name: NATS
+            image: nats:2-alpine
+            cmd: nats-server -js
+
+      - name: E2E Tests
+        image: node:20-alpine
+        env:
+          DATABASE_URL: postgres://test:test@localhost:5432/app_test
+          REDIS_URL: redis://localhost:6379
+          NATS_URL: nats://localhost:4222
+        cmd: npm ci && npm run test:e2e -- --ci
+
+  # Full PR check (runs everything)
+  pr:
+    name: Full PR Check
+    sequence:
+      - name: Housekeeping
+        parallel:
+          - name: Prettier
+            image: node:20-alpine
+            cmd: npx prettier . --check
+
+          - name: ESLint
+            image: node:20-alpine
+            cmd: npx eslint . --max-warnings=0
+
+          - name: Type Check
+            image: node:20-alpine
+            cmd: npx tsc --noEmit
+
+          - name: Dependency Audit
+            image: node:20-alpine
+            cmd: npm audit --audit-level=high
+
+          - name: License Check
+            image: node:20-alpine
+            cmd: npx license-checker --production --onlyAllow 'MIT;ISC;Apache-2.0'
+
+      - name: Tests
+        parallel:
+          - name: Unit Tests
+            image: node:20-alpine
+            cmd: npm ci && npm run test:unit -- --ci
+
+          - name: Integration Tests
+            image: node:20-alpine
+            env:
+              DATABASE_URL: postgres://test:test@localhost:5432/app_test
+              REDIS_URL: redis://localhost:6379
+              NATS_URL: nats://localhost:4222
+            cmd: npm ci && npm run test:integration -- --ci
+
+          - name: E2E Tests
+            image: node:20-alpine
+            env:
+              DATABASE_URL: postgres://test:test@localhost:5432/app_test
+              REDIS_URL: redis://localhost:6379
+              NATS_URL: nats://localhost:4222
+            cmd: npm ci && npm run test:e2e -- --ci

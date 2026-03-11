@@ -1,0 +1,80 @@
+schemaVersion: "0.1.0"
+name: Local Development Environment
+description: Full-stack local development with jobs (replaces docker-compose)
+
+env:
+  NODE_ENV: development
+
+jobs:
+  # Build the application image
+  build:
+    name: Build Application
+    build:
+      image: myapp:dev
+      context: /workflow
+      dockerfile: Dockerfile
+      target: development
+
+  # Start just the database
+  db:
+    name: Start Database
+    sequence:
+      - name: PostgreSQL
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: devpassword
+          POSTGRES_DB: myapp_dev
+
+  # Start the full development environment
+  dev:
+    name: Full Development Environment
+    description: Start all services for local development
+    sequence:
+      # Build first
+      - name: Build Application
+        build:
+          image: myapp:dev
+          context: /workflow
+          dockerfile: Dockerfile
+          target: development
+
+      # Install dependencies
+      - name: Install Dependencies
+        image: node:20-alpine
+        cmd: npm install
+
+      # Run everything in parallel
+      - name: Start Services
+        parallel:
+          - name: PostgreSQL Database
+            image: postgres:15-alpine
+            env:
+              POSTGRES_USER: postgres
+              POSTGRES_PASSWORD: devpassword
+              POSTGRES_DB: myapp_dev
+
+          - name: Redis Cache
+            image: redis:7-alpine
+
+          - name: Mail Server (Dev)
+            image: mailhog/mailhog
+
+          - name: Application Server
+            image: myapp:dev
+            cmd: npm run dev
+            env:
+              DATABASE_URL: postgres://postgres:devpassword@localhost:5432/myapp_dev
+              REDIS_URL: redis://localhost:6379
+              SMTP_HOST: localhost
+              SMTP_PORT: "1025"
+
+  # Run database migrations
+  migrate:
+    name: Run Migrations
+    sequence:
+      - name: Run Database Migrations
+        image: node:20-alpine
+        cmd: npm run migrate
+        env:
+          DATABASE_URL: postgres://postgres:devpassword@localhost:5432/myapp_dev

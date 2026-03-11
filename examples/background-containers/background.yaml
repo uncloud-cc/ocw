@@ -1,0 +1,14 @@
+name: Background container
+sequence:
+  - name: Build image
+    id: build
+    build:
+      image: background-example
+      dockerfile: Dockerfile
+  - name: Run image
+    id: run
+    image: "{{ steps.build.image }}"
+    background: true
+    expose: 8888
+    env:
+      PORT: "8888"

@@ -1,0 +1,6 @@
+name: Building a container
+sequence:
+  - name: Build the container
+    build:
+      image: my-first-ocw-container
+      dockerfile: Dockerfile

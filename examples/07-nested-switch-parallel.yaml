@@ -1,0 +1,101 @@
+schemaVersion: "0.1.0"
+name: Multi-Region Deployment
+description: Deploy to multiple regions based on input with parallel deployment
+
+inputs:
+  region:
+    type: choice
+    description: Target deployment region
+    options:
+      - us-east
+      - us-west
+      - eu-west
+      - ap-southeast
+    required: true
+
+  version:
+    type: string
+    description: Application version to deploy
+    pattern: "^v\\d+\\.\\d+\\.\\d+$"
+    required: true
+
+sequence:
+  - name: Build Multi-Platform Images
+    build:
+      image: myapp:{{inputs.version}}
+      context: /workflow
+      dockerfile: Dockerfile
+      target: production
+      platform:
+        - linux/amd64
+        - linux/arm64
+      buildArgs:
+        VERSION: "{{inputs.version}}"
+        BUILD_DATE: "{{env.BUILD_DATE}}"
+      tags:
+        - myapp:{{inputs.version}}
+        - myapp:latest
+      cacheFrom:
+        - type=registry,ref=myapp:cache
+      cacheTo:
+        - type=registry,ref=myapp:cache,mode=max
+      push: true
+      provenance: true
+      sbom: true
+
+  - switch: "{{inputs.region}}"
+    case:
+      us-east:
+        parallel:
+          - name: Deploy US East 1
+            image: kubectl:latest
+            cmd: kubectl --context=us-east-1 apply -f k8s/deployment.yaml
+            env:
+              REGION: us-east-1
+              VERSION: "{{inputs.version}}"
+
+          - name: Deploy US East 2
+            image: kubectl:latest
+            cmd: kubectl --context=us-east-2 apply -f k8s/deployment.yaml
+            env:
+              REGION: us-east-2
+              VERSION: "{{inputs.version}}"
+
+      us-west:
+        parallel:
+          - name: Deploy US West 1
+            image: kubectl:latest
+            cmd: kubectl --context=us-west-1 apply -f k8s/deployment.yaml
+            env:
+              REGION: us-west-1
+              VERSION: "{{inputs.version}}"
+
+          - name: Deploy US West 2
+            image: kubectl:latest
+            cmd: kubectl --context=us-west-2 apply -f k8s/deployment.yaml
+            env:
+              REGION: us-west-2
+              VERSION: "{{inputs.version}}"
+
+      eu-west:
+        - name: Deploy EU West
+          image: kubectl:latest
+          cmd: kubectl --context=eu-west-1 apply -f k8s/deployment.yaml
+          env:
+            REGION: eu-west-1
+            VERSION: "{{inputs.version}}"
+
+      ap-southeast:
+        - name: Deploy AP Southeast
+          image: kubectl:latest
+          cmd: kubectl --context=ap-southeast-1 apply -f k8s/deployment.yaml
+          env:
+            REGION: ap-southeast-1
+            VERSION: "{{inputs.version}}"
+
+    default:
+      - name: Deploy to Default Region
+        image: kubectl:latest
+        cmd: kubectl apply -f k8s/deployment.yaml
+        env:
+          VERSION: "{{inputs.version}}"

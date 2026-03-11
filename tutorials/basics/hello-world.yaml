@@ -1,0 +1,5 @@
+name: Hello World!
+sequence:
+  - name: hello
+    image: alpine:latest
+    cmd: echo "Hello OCW World! 🎉"

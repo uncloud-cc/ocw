@@ -1,0 +1,65 @@
+schemaVersion: "0.1.0"
+name: Advanced Workflow with Extensions
+id: advanced_workflow
+description: Workflow demonstrating extensions, config, and monitoring
+
+config:
+  slack:
+    webhookUrl: "{{secrets.SLACK_WEBHOOK}}"
+    channel: "#deployments"
+  datadog:
+    apiKey: "{{secrets.DATADOG_API_KEY}}"
+    tags:
+      - "env:production"
+      - "team:platform"
+
+env:
+  CI: "true"
+  LOG_LEVEL: info
+
+sequence:
+  - name: Notify Start
+    image: alpine:latest
+    cmd: echo "Starting deployment for {{workflow.name}}"
+    config:
+      slack:
+        message: "Deployment started for {{workflow.name}}"
+
+  - parallel:
+      - name: Backend Tests
+        image: golang:1.21
+        cmd: go test ./...
+        workdir: /workflow/backend
+        memory: "2g"
+        cpus: 2
+        config:
+          datadog:
+            metric: backend.tests.duration
+
+      - name: Frontend Tests
+        image: node:20-alpine
+        cmd: npm test
+        workdir: /workflow/frontend
+        memory: "2g"
+        cpus: 2
+        config:
+          datadog:
+            metric: frontend.tests.duration
+
+  - name: Build and Push
+    build:
+      image: myapp:latest
+      context: /workflow
+      dockerfile: Dockerfile
+      buildArgs:
+        APP_VERSION: "{{inputs.version}}"
+      push: true
+      labels:
+        org.opencontainers.image.source: https://github.com/org/repo
+        org.opencontainers.image.version: "{{inputs.version}}"
+
+  - name: Deploy
+    image: kubectl:latest
+    cmd: kubectl apply -f k8s/
+    env:
+      KUBECONFIG: /workflow/.kube/config

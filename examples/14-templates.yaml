@@ -1,0 +1,358 @@
+schemaVersion: "0.1.0"
+name: Template Interpolation Example
+description: |
+  Demonstrates using template expressions in OCW workflows.
+  
+  Template expressions:
+    {{ steps.<id>.image }}    - Reference image from a build step
+    {{ steps.<id>.<output> }} - Reference output from a run step
+    {{ env.<name> }}          - Environment variable (from .env or system)
+    {{ secrets.<name> }}      - Secret value (from .env or system env)
+    {{ workflow.name }}       - Workflow metadata
+    {{ job.name }}            - Job metadata
+    {{ inputs.<name> }}       - Workflow input value
+
+  .env File Support:
+    Place a .env file in the workflow directory with KEY=value pairs.
+    Values are loaded automatically and available as both env and secrets.
+
+  Step Outputs:
+    Steps with an 'id' automatically get $OUTPUTS env var set.
+    Write KEY=value lines to $OUTPUTS to set outputs.
+    Reference outputs in later steps as {{ steps.<id>.<key> }}
+
+  Job Outputs:
+    Jobs can define outputs that are displayed after completion.
+    Use template expressions to reference step outputs.
+
+  All string fields in workflows support template interpolation, including:
+    - Run steps: image, cmd, entrypoint, args[], env values, workdir, 
+      platform, memory, healthCheck.cmd
+    - Build steps: image, context, dockerfile, target, tags[], buildArgs values
+    - Switch: switch expression value
+
+jobs:
+  # Build and run: use the built image in a subsequent step
+  build_and_run:
+    name: Build and Run Example
+    description: Build an image and run a container using it
+    sequence:
+      - name: Build App Image
+        id: build_app
+        build:
+          image: my-app:latest
+          context: /workflow
+          dockerfile: Dockerfile.example
+
+      - name: Run App
+        # Use the image from the build step
+        image: "{{ steps.build_app.image }}"
+        cmd: echo "Running image {{ steps.build_app.image }}"
+
+  # Environment variable interpolation
+  env_example:
+    name: Environment Variables Example
+    sequence:
+      - name: Show Environment
+        image: alpine:latest
+        cmd: |
+          echo "Workflow: {{ workflow.name }}"
+          echo "Job: {{ job.name }}"
+          echo "USER from env: {{ env.USER }}"
+          echo "HOME from env: {{ env.HOME }}"
+
+  # Use environment variables in configuration
+  config_from_env:
+    name: Config from Environment
+    description: Use environment variables to configure steps
+    sequence:
+      - name: Build with version from env
+        id: build
+        build:
+          image: "my-app:{{ env.APP_VERSION }}"
+          context: /workflow
+          dockerfile: Dockerfile.example
+          buildArgs:
+            VERSION: "{{ env.APP_VERSION }}"
+            BUILD_DATE: "{{ env.BUILD_DATE }}"
+
+      - name: Deploy
+        image: "{{ steps.build.image }}"
+        cmd: echo "Deploying version {{ env.APP_VERSION }}"
+
+  # Simple test that doesn't require building
+  simple_template_test:
+    name: Simple Template Test
+    description: Test basic template interpolation without building
+    sequence:
+      - name: Test workflow metadata
+        image: alpine:latest
+        cmd: |
+          echo "=== Template Test ==="
+          echo "Workflow name: {{ workflow.name }}"
+          echo "Job name: {{ job.name }}"
+
+      - name: Test env interpolation
+        image: alpine:latest
+        env:
+          MY_USER: "{{ env.USER }}"
+          MY_HOME: "{{ env.HOME }}"
+        cmd: |
+          echo "MY_USER=$MY_USER"
+          echo "MY_HOME=$MY_HOME"
+
+  # Build a container and trigger it with templated arguments
+  build_with_args:
+    name: Build and Run with Arguments
+    description: |
+      Build a custom container image, then run it with arguments
+      that are constructed using template interpolation.
+    sequence:
+      - name: Build CLI Tool
+        id: cli_tool
+        build:
+          image: my-cli-tool:latest
+          context: /workflow
+          dockerfile: Dockerfile.example
+
+      - name: Run with templated cmd arguments
+        image: "{{ steps.cli_tool.image }}"
+        # Use cmd to invoke with templated arguments
+        cmd: |
+          echo "=== Running with templated arguments ==="
+          echo "User: {{ env.USER }}"
+          echo "Home: {{ env.HOME }}"
+          echo "Workflow: {{ workflow.name }}"
+          echo "Job: {{ job.name }}"
+          echo "Image used: {{ steps.cli_tool.image }}"
+
+      - name: Run with templated args array
+        image: "{{ steps.cli_tool.image }}"
+        # Use entrypoint + args for structured argument passing
+        entrypoint: echo
+        args:
+          - "Args test:"
+          - "user={{ env.USER }}"
+          - "workflow={{ workflow.name }}"
+          - "job={{ job.name }}"
+
+  # Build and run with complex templated configuration
+  build_processor:
+    name: Build Data Processor
+    description: |
+      Build a data processing image and run it with configuration
+      derived from environment variables and workflow metadata.
+    sequence:
+      - name: Build Processor Image
+        id: processor
+        build:
+          image: data-processor:latest
+          context: /workflow
+          dockerfile: Dockerfile.example
+          buildArgs:
+            VERSION: "1.0.0"
+
+      - name: Process Data
+        image: "{{ steps.processor.image }}"
+        env:
+          # Pass workflow metadata as env vars
+          WORKFLOW_NAME: "{{ workflow.name }}"
+          JOB_NAME: "{{ job.name }}"
+        cmd: |
+          echo "=== Processing Data ==="
+          echo "Image: {{ steps.processor.image }}"
+          echo "Workflow: $WORKFLOW_NAME"
+          echo "Job: $JOB_NAME"
+
+      - name: Run Analysis
+        image: "{{ steps.processor.image }}"
+        # Demonstrate using the same built image for multiple steps
+        entrypoint: echo
+        args:
+          - "Analysis output:"
+          - "workflow={{ workflow.name }}"
+          - "image={{ steps.processor.image }}"
+
+  # Chained builds: one build references output of another
+  chained_builds:
+    name: Chained Build Pipeline
+    description: |
+      Build multiple images in sequence, where later builds
+      can reference earlier built images via buildArgs.
+    sequence:
+      - name: Build Base Image
+        id: base
+        build:
+          image: my-base:v1
+          context: /workflow
+          dockerfile: Dockerfile.example
+
+      - name: Build App on Base
+        id: app
+        build:
+          image: my-app:v1
+          context: /workflow
+          dockerfile: Dockerfile.example
+          buildArgs:
+            # Pass the built base image name to the build
+            # (In a real Dockerfile, you'd use: ARG BASE_IMAGE / FROM $BASE_IMAGE)
+            BASE_IMAGE: "{{ steps.base.image }}"
+
+      - name: Test App Image
+        image: "{{ steps.app.image }}"
+        cmd: |
+          echo "=== Testing Chained Build ==="
+          echo "Base image: {{ steps.base.image }}"
+          echo "App image: {{ steps.app.image }}"
+
+      - name: Run App with Full Config
+        image: "{{ steps.app.image }}"
+        env:
+          BASE_IMAGE: "{{ steps.base.image }}"
+          APP_IMAGE: "{{ steps.app.image }}"
+        entrypoint: echo
+        args:
+          - "Running app:"
+          - "base={{ steps.base.image }}"
+          - "app={{ steps.app.image }}"
+          - "user={{ env.USER }}"
+
+  # Step outputs: pass data between steps
+  step_outputs:
+    name: Step Outputs Example
+    description: |
+      Demonstrate passing data between steps using outputs.
+      Steps write KEY=value to $OUTPUTS, then later steps
+      reference them as {{ steps.<id>.<key> }}
+    outputs:
+      version: "{{ steps.generator.version }}"
+      final_version: "{{ steps.consumer.final_version }}"
+      environment: "{{ steps.generator.environment }}"
+    sequence:
+      - name: Generate Values
+        id: generator
+        image: alpine:latest
+        cmd: |
+          echo "Generating some values..."
+          echo "version=1.2.3" >> $OUTPUTS
+          echo "timestamp=$(date +%s)" >> $OUTPUTS
+          echo "commit_sha=abc123def" >> $OUTPUTS
+          echo "environment=staging" >> $OUTPUTS
+
+      - name: Use Generated Values
+        id: consumer
+        image: alpine:latest
+        cmd: |
+          echo "=== Using outputs from generator step ==="
+          echo "Version: {{ steps.generator.version }}"
+          echo "Timestamp: {{ steps.generator.timestamp }}"
+          echo "Commit: {{ steps.generator.commit_sha }}"
+          echo "Environment: {{ steps.generator.environment }}"
+          
+          # This step can also produce outputs
+          echo "processed=true" >> $OUTPUTS
+          echo "final_version={{ steps.generator.version }}-{{ steps.generator.environment }}" >> $OUTPUTS
+
+      - name: Final Step
+        image: alpine:latest
+        cmd: |
+          echo "=== Final summary ==="
+          echo "Original version: {{ steps.generator.version }}"
+          echo "Final version: {{ steps.consumer.final_version }}"
+          echo "Was processed: {{ steps.consumer.processed }}"
+
+  # .env file support: load env vars and secrets from .env
+  dotenv_example:
+    name: DotEnv Example
+    description: |
+      Demonstrates loading environment variables and secrets from a .env file.
+      Create a .env file in the workflow directory with KEY=value pairs.
+      Values are available as both {{ env.KEY }} and {{ secrets.KEY }}.
+    sequence:
+      - name: Show env from .env file
+        image: alpine:latest
+        cmd: |
+          echo "=== Environment from .env ==="
+          echo "APP_NAME: {{ env.APP_NAME }}"
+          echo "APP_VERSION: {{ env.APP_VERSION }}"
+          echo "DEPLOY_ENV: {{ env.DEPLOY_ENV }}"
+      
+      - name: Show secrets from .env file
+        image: alpine:latest
+        cmd: |
+          echo "=== Secrets from .env ==="
+          echo "DB_HOST: {{ secrets.DB_HOST }}"
+          echo "DB_USER: {{ secrets.DB_USER }}"
+          echo "API_KEY: {{ secrets.API_KEY }}"
+      
+      - name: Use in container env
+        image: alpine:latest
+        env:
+          MY_APP: "{{ env.APP_NAME }}"
+          MY_VERSION: "{{ env.APP_VERSION }}"
+          DATABASE_URL: "postgres://{{ secrets.DB_USER }}:{{ secrets.DB_PASSWORD }}@{{ secrets.DB_HOST }}:{{ env.DB_PORT }}/mydb"
+        cmd: |
+          echo "=== Passed to container ==="
+          echo "MY_APP=$MY_APP"
+          echo "MY_VERSION=$MY_VERSION"
+          echo "DATABASE_URL=$DATABASE_URL"
+
+  # Inputs from YAML file: structured configuration
+  inputs_example:
+    name: Inputs Example
+    description: |
+      Demonstrates using inputs from a YAML file for structured configuration.
+      Run with: ocw -i inputs.yaml inputs_example
+      
+      The inputs.yaml file can contain any key-value pairs:
+        app_name: "MyApp"
+        environment: staging
+        replicas: 3
+        enable_debug: true
+      
+      Values are available as {{ inputs.<key> }} in templates.
+    outputs:
+      app_name: "{{ inputs.app_name }}"
+      environment: "{{ inputs.environment }}"
+      replicas: "{{ inputs.replicas }}"
+    sequence:
+      - name: Show inputs from file
+        image: alpine:latest
+        cmd: |
+          echo "=== Inputs from YAML File ==="
+          echo "App Name: {{ inputs.app_name }}"
+          echo "App Version: {{ inputs.app_version }}"
+          echo "Environment: {{ inputs.environment }}"
+          echo "Replicas: {{ inputs.replicas }}"
+          echo "Memory Limit: {{ inputs.memory_limit }}"
+          
+      - name: Show feature flags
+        image: alpine:latest
+        cmd: |
+          echo "=== Feature Flags ==="
+          echo "Debug Enabled: {{ inputs.enable_debug }}"
+          echo "Metrics Enabled: {{ inputs.enable_metrics }}"
+          
+      - name: Use inputs in configuration
+        image: alpine:latest
+        env:
+          APP_NAME: "{{ inputs.app_name }}"
+          APP_VERSION: "{{ inputs.app_version }}"
+          ENVIRONMENT: "{{ inputs.environment }}"
+          DB_CONNECTION: "postgres://{{ inputs.db_host }}:{{ inputs.db_port }}/{{ inputs.db_name }}"
+        cmd: |
+          echo "=== Container Environment ==="
+          echo "APP_NAME=$APP_NAME"
+          echo "APP_VERSION=$APP_VERSION"
+          echo "ENVIRONMENT=$ENVIRONMENT"
+          echo "DB_CONNECTION=$DB_CONNECTION"
+          
+      - name: Combine inputs with other templates
+        image: alpine:latest
+        cmd: |
+          echo "=== Combined Template Example ==="
+          echo "Deploying {{ inputs.app_name }} v{{ inputs.app_version }}"
+          echo "To {{ inputs.environment }} environment"
+          echo "Running in workflow: {{ workflow.name }}"
+          echo "Job: {{ job.name }}"
+          echo "User: {{ env.USER }}"

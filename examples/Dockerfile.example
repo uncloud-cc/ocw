@@ -1,0 +1,12 @@
+FROM alpine:latest
+
+ARG VERSION=unknown
+ARG BUILD_DATE=unknown
+ENV NAME=unknown
+
+LABEL version="${VERSION}" \
+      build_date="${BUILD_DATE}"
+
+RUN echo "Building version ${VERSION} on ${BUILD_DATE}"
+
+CMD ["echo", "Hello from my-app: ", "${NAME}"]

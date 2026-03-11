@@ -1,0 +1,154 @@
+schemaVersion: "0.1.0"
+name: Background Containers Example
+description: |
+  Demonstrates using background containers for databases and services.
+  Background containers start, wait for health check, then continue to next step.
+  All background containers are automatically cleaned up when the job completes.
+  
+  Use 'expose' to make container ports accessible from the host machine.
+  This is useful for local development or creating preview environments.
+
+jobs:
+  # Simple example with Redis (exposed for local access)
+  redis_example:
+    name: Redis Background Example
+    sequence:
+      - name: Start Redis
+        id: redis
+        image: redis:7-alpine
+        background: true
+        expose: 6379  # Simple form: expose port 6379 on localhost:6379
+        healthCheck:
+          cmd: redis-cli ping
+          interval: 1s
+          retries: 10
+
+      - name: Use Redis
+        image: redis:7-alpine
+        cmd: |
+          echo "Setting key..."
+          redis-cli -h redis SET mykey "Hello from OCW!"
+          echo "Getting key..."
+          redis-cli -h redis GET mykey
+
+  # Database example with PostgreSQL (exposed)
+  postgres_example:
+    name: PostgreSQL Background Example
+    sequence:
+      - name: Start PostgreSQL
+        id: postgres
+        image: postgres:16-alpine
+        background: true
+        expose:
+          - containerPort: 5432
+            hostPort: 5432
+            protocol: tcp
+        healthCheck:
+          cmd: pg_isready -U postgres
+          interval: 2s
+          retries: 15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: testdb
+
+      - name: Create Table
+        image: postgres:16-alpine
+        cmd: |
+          psql -h postgres -U postgres -d testdb -c "
+            CREATE TABLE IF NOT EXISTS users (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(100)
+            );
+          "
+        env:
+          PGPASSWORD: secret
+
+      - name: Insert Data
+        image: postgres:16-alpine
+        cmd: |
+          psql -h postgres -U postgres -d testdb -c "
+            INSERT INTO users (name) VALUES ('Alice'), ('Bob');
+          "
+        env:
+          PGPASSWORD: secret
+
+      - name: Query Data
+        image: postgres:16-alpine
+        cmd: |
+          psql -h postgres -U postgres -d testdb -c "
+            SELECT * FROM users;
+          "
+        env:
+          PGPASSWORD: secret
+
+  # Multiple background services with different expose configurations
+  multi_service:
+    name: Multiple Services Example
+    sequence:
+      - name: Start PostgreSQL
+        id: postgres
+        image: postgres:16-alpine
+        background: true
+        expose:
+          - containerPort: 5432
+            protocol: tcp
+        healthCheck:
+          cmd: pg_isready -U postgres
+          interval: 2s
+          retries: 15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: app
+
+      - name: Start Redis
+        id: redis
+        image: redis:7-alpine
+        background: true
+        expose: 6379  # Simple form
+        healthCheck:
+          cmd: redis-cli ping
+          interval: 1s
+          retries: 10
+
+      - name: Verify Services
+        image: alpine:latest
+        cmd: |
+          echo "Both PostgreSQL and Redis are running!"
+          echo "PostgreSQL: postgres:5432 (internal), localhost:5432 (host)"
+          echo "Redis: redis:6379 (internal), localhost:6379 (host)"
+          echo ""
+          echo "You can connect from your host machine using:"
+          echo "  psql -h localhost -U postgres -d app"
+          echo "  redis-cli -h localhost"
+
+  # Development server example
+  dev_server:
+    name: Development Server Example
+    description: |
+      Example showing a typical development setup with a web server.
+      The server is exposed so you can access it from your browser.
+    sequence:
+      - name: Start Dev Server
+        id: web
+        image: python:3.12-alpine
+        background: true
+        expose: 8000
+        healthCheck:
+          # Use Python to check if server is up (wget not available in alpine)
+          cmd: python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000')"
+          interval: 1s
+          retries: 15
+          startPeriod: 1s
+        cmd: |
+          echo "Starting development server..."
+          python -m http.server 8000
+
+      - name: Test Server
+        image: python:3.12-alpine
+        cmd: |
+          echo "Testing server..."
+          python -c "import urllib.request; print(urllib.request.urlopen('http://web:8000').read().decode()[:500])"
+          echo ""
+          echo "Server is running at http://localhost:8000"

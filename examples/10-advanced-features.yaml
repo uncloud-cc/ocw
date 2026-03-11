@@ -1,0 +1,115 @@
+schemaVersion: "0.1.0"
+name: Advanced Features Showcase
+description: Comprehensive example showcasing advanced run and build options
+
+inputs:
+  cpuLimit:
+    type: number
+    description: CPU limit for containers
+    min: 1
+    max: 8
+    default: 2
+    required: false
+
+  memoryLimit:
+    type: string
+    description: Memory limit
+    default: "2g"
+    required: false
+
+env:
+  LOG_LEVEL: debug
+  TELEMETRY_ENABLED: "true"
+
+secrets:
+  npmToken:
+    secure: v1:abc123:encryptedTokenHere
+  dockerRegistry:
+    secure: v1:def456:encryptedRegistryCredentials
+
+sequence:
+  - name: Build with advanced options
+    id: build_app
+    build:
+      image: myapp:advanced
+      context: /workflow
+      dockerfile: Dockerfile.multi-stage
+      target: production
+
+      # Multi-platform
+      platform:
+        - linux/amd64
+        - linux/arm64
+
+      # Build arguments
+      buildArgs:
+        NODE_VERSION: "20"
+        NPM_TOKEN: "{{secrets.npmToken}}"
+        BUILD_ENV: production
+
+      # Advanced caching
+      cacheFrom:
+        - type=registry,ref=myregistry.io/myapp:cache
+        - type=local,src=/cache/buildkit
+      cacheTo:
+        - type=registry,ref=myregistry.io/myapp:cache,mode=max
+        - type=local,dest=/cache/buildkit,mode=max
+
+      # Multiple outputs
+      output:
+        - type: docker
+        - type: oci
+          dest: /workflow/myapp.tar
+          compression: zstd
+          compressionLevel: 9
+
+      # Security & attestation
+      provenance: mode=max
+      sbom: true
+
+      # Build secrets (for private npm packages)
+      secrets:
+        - id: npm
+          env: NPM_TOKEN
+
+      # Labels
+      labels:
+        org.opencontainers.image.title: My Application
+        org.opencontainers.image.version: "1.0.0"
+        org.opencontainers.image.source: https://github.com/org/repo
+        org.opencontainers.image.licenses: MIT
+
+      # Resource limits during build
+      shmSize: "2g"
+      ulimit:
+        nofile: "65536:65536"
+
+      # Additional build contexts
+      buildContext:
+        shared-libs: /workflow/shared
+        proto-definitions: /workflow/proto
+
+  - name: Run with resource limits
+    image: "{{steps.build_app.image}}"
+    cmd: npm start
+
+    # Resource limits
+    memory: "{{inputs.memoryLimit}}"
+    cpus: "{{inputs.cpuLimit}}"
+
+    # Environment
+    env:
+      NODE_ENV: production
+      DATABASE_URL: "{{secrets.DATABASE_URL}}"
+      LOG_LEVEL: "{{env.LOG_LEVEL}}"
+
+  - name: GPU workload example
+    image: tensorflow/tensorflow:latest-gpu
+    cmd: python train.py
+
+    gpus: all
+    memory: "32g"
+
+    env:
+      CUDA_VISIBLE_DEVICES: "0,1"
+      TF_FORCE_GPU_ALLOW_GROWTH: "true"
