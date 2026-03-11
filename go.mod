@@ -1,4 +1,4 @@
-module ocw
+module github.com/opencontainerworkflow/ocw
 
 go 1.24.1
 

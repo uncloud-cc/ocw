@@ -2,5 +2,8 @@
 
 ## Install
 
-You can install the ocw cli by running the following command:  
-`go install github.com/ocw/cli`
+You can install the ocw CLI by running:
+
+```bash
+go install github.com/opencontainerworkflow/ocw/cmd/ocw@feat-add-initial-version
+```

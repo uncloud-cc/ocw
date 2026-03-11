@@ -11,8 +11,8 @@ import (
 	"strings"
 	"syscall"
 
-	"ocw/pkg/runner"
-	"ocw/pkg/schema"
+	"github.com/opencontainerworkflow/ocw/pkg/runner"
+	"github.com/opencontainerworkflow/ocw/pkg/schema"
 )
 
 var (

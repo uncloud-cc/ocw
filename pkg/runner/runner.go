@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"ocw/pkg/schema"
+	"github.com/opencontainerworkflow/ocw/pkg/schema"
 
 	"github.com/goccy/go-yaml"
 )

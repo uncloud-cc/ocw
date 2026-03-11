@@ -12,7 +12,7 @@ import (
 	"reflect"
 
 	"github.com/invopop/jsonschema"
-	"ocw/pkg/schema"
+	"github.com/opencontainerworkflow/ocw/pkg/schema"
 )
 
 func main() {
