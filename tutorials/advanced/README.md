@@ -1,26 +1,31 @@
 # Open Container Workflow (ocw) Advanced
 
+> 🤖 First robot draft - needs human refinement
+
 This tutorial builds on the [basics tutorial](../basics/README.md). We'll cover the powerful features that make ocw great for real-world workflows.
 
 All the example files from this tutorial are available in this directory.
 
 ## Table of Contents
 
-- [Templating](#templating)
-  - [Available Namespaces](#available-namespaces)
-  - [Step Outputs](#step-outputs)
-  - [Using .env Files](#using-env-files)
-- [Parallel Steps](#parallel-steps)
-  - [Nesting Parallel and Sequence](#nesting-parallel-and-sequence)
-- [Conditionals (switch / case)](#conditionals-switch--case)
-- [Building Reusable Jobs](#building-reusable-jobs)
-  - [Job Outputs](#job-outputs)
-- [Exposing Containers](#exposing-containers)
-  - [Background Containers](#background-containers)
-  - [Health Checks](#health-checks)
-  - [Container Networking](#container-networking)
-- [Putting It All Together](#putting-it-all-together)
-- [What's Next?](#whats-next)
+- [Open Container Workflow (ocw) Advanced](#open-container-workflow-ocw-advanced)
+  - [Table of Contents](#table-of-contents)
+  - [Templating](#templating)
+    - [Available Namespaces](#available-namespaces)
+    - [Step Outputs](#step-outputs)
+    - [Using .env Files](#using-env-files)
+  - [Parallel Steps](#parallel-steps)
+    - [Nesting Parallel and Sequence](#nesting-parallel-and-sequence)
+  - [Conditionals (switch / case)](#conditionals-switch--case)
+  - [Building Reusable Jobs](#building-reusable-jobs)
+    - [Job Outputs](#job-outputs)
+  - [Exposing Containers](#exposing-containers)
+    - [Background Containers](#background-containers)
+    - [Health Checks](#health-checks)
+    - [Container Networking](#container-networking)
+  - [Putting It All Together](#putting-it-all-together)
+  - [What's Next?](#whats-next)
+    - [Quick Reference](#quick-reference)
 
 ---
 
@@ -56,16 +61,17 @@ Run it with `ocw templates.yaml`:
 
 Here's everything you can reference in templates:
 
-| Template | Description |
-|----------|-------------|
-| `{{ workflow.name }}` | Name of the workflow |
-| `{{ job.name }}` | Name of the current job |
-| `{{ env.VARNAME }}` | Environment variable |
-| `{{ secrets.NAME }}` | Secret value (from .env file) |
-| `{{ inputs.NAME }}` | Workflow input |
-| `{{ steps.ID.KEY }}` | Output from a previous step |
+| Template              | Description                   |
+| --------------------- | ----------------------------- |
+| `{{ workflow.name }}` | Name of the workflow          |
+| `{{ job.name }}`      | Name of the current job       |
+| `{{ env.VARNAME }}`   | Environment variable          |
+| `{{ secrets.NAME }}`  | Secret value (from .env file) |
+| `{{ inputs.NAME }}`   | Workflow input                |
+| `{{ steps.ID.KEY }}`  | Output from a previous step   |
 
 Templates work in most string fields including:
+
 - `image`, `cmd`, `entrypoint`, `args[]`
 - `env` values, `workdir`
 - Build options: `dockerfile`, `context`, `target`, `tags[]`, `buildArgs`
@@ -116,7 +122,7 @@ Build steps automatically register their image as an output:
     dockerfile: Dockerfile
 
 - name: Run App
-  image: "{{ steps.build.image }}"  # Uses myapp:latest
+  image: "{{ steps.build.image }}" # Uses myapp:latest
   cmd: ./start.sh
 ```
 
@@ -221,11 +227,11 @@ sequence:
       - name: Unit Tests
         image: node:20-alpine
         cmd: echo "Running unit tests..."
-      
+
       - name: Integration Tests
         image: node:20-alpine
         cmd: echo "Running integration tests..."
-      
+
       - name: Lint
         image: node:20-alpine
         cmd: echo "Running linter..."
@@ -263,7 +269,7 @@ case:
       cmd: echo "Deploying to staging environment..."
 
   production:
-    - name: Deploy to Production  
+    - name: Deploy to Production
       image: alpine:latest
       cmd: |
         echo "Deploying to production environment..."
@@ -286,6 +292,7 @@ DEPLOY_ENV=production ocw switch.yaml
 ```
 
 The `switch` expression supports any template, so you can base decisions on:
+
 - Environment variables: `{{ env.BRANCH }}`
 - Step outputs: `{{ steps.check.result }}`
 - Inputs: `{{ inputs.environment }}`
@@ -309,7 +316,7 @@ jobs:
       - name: Install
         image: node:20-alpine
         cmd: echo "Installing dependencies..."
-      
+
       - name: Build
         image: node:20-alpine
         cmd: echo "Building..."
@@ -320,7 +327,7 @@ jobs:
       - name: Unit Tests
         image: node:20-alpine
         cmd: echo "Running unit tests..."
-      
+
       - name: Lint
         image: node:20-alpine
         cmd: echo "Running linter..."
@@ -395,7 +402,7 @@ For development environments, you often need to access services from your host m
 - name: Start Web Server
   image: nginx:alpine
   background: true
-  expose: 8080  # Container port 8080 → localhost:8080
+  expose: 8080 # Container port 8080 → localhost:8080
 ```
 
 You can also map to a different host port:
@@ -403,7 +410,7 @@ You can also map to a different host port:
 ```yaml
 expose:
   - containerPort: 80
-    hostPort: 8080      # Container port 80 → localhost:8080
+    hostPort: 8080 # Container port 80 → localhost:8080
     protocol: http
 ```
 
@@ -457,20 +464,20 @@ Health checks ensure services are ready before continuing:
 
 ```yaml
 healthCheck:
-  cmd: redis-cli ping      # Command to check health
-  interval: 1s             # Time between checks  
-  retries: 10              # Number of attempts before failing
-  startPeriod: 2s          # Grace period before first check
+  cmd: redis-cli ping # Command to check health
+  interval: 1s # Time between checks
+  retries: 10 # Number of attempts before failing
+  startPeriod: 2s # Grace period before first check
 ```
 
 Common health check commands:
 
-| Service | Health Check |
-|---------|-------------|
-| PostgreSQL | `pg_isready -U postgres` |
-| Redis | `redis-cli ping` |
+| Service     | Health Check                                    |
+| ----------- | ----------------------------------------------- |
+| PostgreSQL  | `pg_isready -U postgres`                        |
+| Redis       | `redis-cli ping`                                |
 | HTTP Server | `wget -q --spider http://localhost:8080/health` |
-| MySQL | `mysqladmin ping -h localhost` |
+| MySQL       | `mysqladmin ping -h localhost`                  |
 
 ### Container Networking
 
@@ -478,13 +485,13 @@ Background containers with an `id` can be reached by other containers using that
 
 ```yaml
 - name: Start Redis
-  id: redis              # This becomes the hostname
+  id: redis # This becomes the hostname
   image: redis:7-alpine
   background: true
 
 - name: Use Redis
   image: redis:7-alpine
-  cmd: redis-cli -h redis SET hello world  # Connect via hostname "redis"
+  cmd: redis-cli -h redis SET hello world # Connect via hostname "redis"
 ```
 
 ---
@@ -544,19 +551,19 @@ jobs:
         - name: Unit Tests
           image: node:20-alpine
           cmd: echo "Running unit tests only..."
-      
+
       integration:
         - name: Integration Tests
           image: node:20-alpine
           cmd: echo "Running integration tests only..."
-    
+
     default:
       - name: All Tests
         parallel:
           - name: Unit Tests
             image: node:20-alpine
             cmd: echo "Running unit tests..."
-          
+
           - name: Integration Tests
             image: node:20-alpine
             cmd: echo "Running integration tests..."
@@ -602,18 +609,18 @@ You now know all the major features of ocw! Here are some things to explore:
 
 ### Quick Reference
 
-| Feature | Description |
-|---------|-------------|
-| `{{ template }}` | Dynamic values from env, secrets, steps, etc. |
-| `$OUTPUTS` | Write `KEY=value` to pass data between steps |
-| `sequence` | Run steps one after another |
-| `parallel` | Run steps simultaneously |
-| `switch/case` | Conditional branching |
-| `jobs` | Multiple named entry points |
-| `background: true` | Keep container running |
-| `expose` | Make ports accessible from host |
-| `healthCheck` | Wait for service to be ready |
-| `-e file.env` | Load custom environment file |
+| Feature            | Description                                   |
+| ------------------ | --------------------------------------------- |
+| `{{ template }}`   | Dynamic values from env, secrets, steps, etc. |
+| `$OUTPUTS`         | Write `KEY=value` to pass data between steps  |
+| `sequence`         | Run steps one after another                   |
+| `parallel`         | Run steps simultaneously                      |
+| `switch/case`      | Conditional branching                         |
+| `jobs`             | Multiple named entry points                   |
+| `background: true` | Keep container running                        |
+| `expose`           | Make ports accessible from host               |
+| `healthCheck`      | Wait for service to be ready                  |
+| `-e file.env`      | Load custom environment file                  |
 
 **Got feedback?**  
 [Join the community on Github](https://github.com/opencontainerworkflow/ocw/discussions) to ask questions, get help and share feedback.
