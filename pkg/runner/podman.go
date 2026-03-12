@@ -457,18 +457,32 @@ type BuildImageOptions struct {
 // BuildImage builds an image using podman build
 func (p *Podman) BuildImage(ctx context.Context, opts BuildImageOptions) (string, error) {
 	// Resolve the build context path
+	// The context is always relative to the workflow directory (conceptually /workflow)
+	// Examples:
+	//   - "" or "/workflow" → workflow root
+	//   - "/workflow/Dockerfiles" → workflow_root/Dockerfiles
+	//   - "./Dockerfiles" → workflow_root/Dockerfiles
+	//   - "Dockerfiles" → workflow_root/Dockerfiles
 	contextPath := opts.Context
 	if contextPath == "" {
 		contextPath = "/workflow"
 	}
 
-	// Replace /workflow with actual workflow directory
+	// Resolve context path relative to workflow directory
+	var resolvedPath string
 	if strings.HasPrefix(contextPath, "/workflow") {
-		contextPath = strings.Replace(contextPath, "/workflow", opts.WorkflowDir, 1)
+		// Absolute /workflow path: replace /workflow with actual workflow directory
+		resolvedPath = strings.Replace(contextPath, "/workflow", opts.WorkflowDir, 1)
+	} else if strings.HasPrefix(contextPath, "./") || strings.HasPrefix(contextPath, "../") || !strings.HasPrefix(contextPath, "/") {
+		// Relative path: join with workflow directory
+		resolvedPath = filepath.Join(opts.WorkflowDir, contextPath)
+	} else {
+		// Absolute path outside /workflow: use as-is
+		resolvedPath = contextPath
 	}
 
 	// Make sure the path is absolute
-	absContextPath, err := filepath.Abs(contextPath)
+	absContextPath, err := filepath.Abs(resolvedPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve context path: %w", err)
 	}
@@ -492,11 +506,28 @@ func (p *Podman) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 	// Add dockerfile if specified
 	if opts.Dockerfile != "" {
 		dockerfilePath := opts.Dockerfile
-		// If dockerfile path is relative, it's relative to context
-		if !filepath.IsAbs(dockerfilePath) {
-			dockerfilePath = filepath.Join(absContextPath, dockerfilePath)
+
+		// Resolve dockerfile path
+		// If it's just a filename (no directory separators), resolve relative to build context
+		// Otherwise, resolve relative to workflow directory
+		var resolvedDockerfilePath string
+
+		// Check if it's just a filename (no path separators)
+		if !strings.Contains(dockerfilePath, "/") && !strings.Contains(dockerfilePath, string(filepath.Separator)) {
+			// Just a filename: resolve relative to build context
+			resolvedDockerfilePath = filepath.Join(absContextPath, dockerfilePath)
+		} else if strings.HasPrefix(dockerfilePath, "/workflow") {
+			// Absolute /workflow path: replace /workflow with actual workflow directory
+			resolvedDockerfilePath = strings.Replace(dockerfilePath, "/workflow", opts.WorkflowDir, 1)
+		} else if strings.HasPrefix(dockerfilePath, "./") || strings.HasPrefix(dockerfilePath, "../") || !strings.HasPrefix(dockerfilePath, "/") {
+			// Relative path with directory: join with workflow directory
+			resolvedDockerfilePath = filepath.Join(opts.WorkflowDir, dockerfilePath)
+		} else {
+			// Absolute path outside /workflow: use as-is
+			resolvedDockerfilePath = dockerfilePath
 		}
-		args = append(args, "-f", dockerfilePath)
+
+		args = append(args, "-f", resolvedDockerfilePath)
 	}
 
 	// Add target if specified
@@ -507,6 +538,17 @@ func (p *Podman) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 	// Add build args
 	for key, value := range opts.BuildArgs {
 		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
+	}
+
+	// Mount workflow directory at /workflow during build
+	// This makes the workflow directory available at /workflow inside the Dockerfile
+	// consistent with how run steps work
+	if opts.WorkflowDir != "" {
+		absWorkflowDir, err := filepath.Abs(opts.WorkflowDir)
+		if err != nil {
+			return "", fmt.Errorf("failed to get absolute path for workflow dir: %w", err)
+		}
+		args = append(args, "-v", fmt.Sprintf("%s:/workflow:ro", absWorkflowDir))
 	}
 
 	// Add context path

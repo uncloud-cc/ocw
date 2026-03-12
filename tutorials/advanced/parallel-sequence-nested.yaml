@@ -6,4 +6,4 @@ sequence:
         build:
           image: ocw-tutorials/website
           dockerfile: Dockerfile.website
-          context: /workflow/Dockerfiles
+          context: ./Dockerfiles
