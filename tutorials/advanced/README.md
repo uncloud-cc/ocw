@@ -1,5 +1,78 @@
 # Open Container Workflow (ocw) Advanced
+This is the second tutorial where we dive into advanced features of ocw workflows. Make sure you have the [ocw cli](../basics/README.md#setup) and [Podman](https://podman.io/docs/installation) setup to follow along.
 
+## Parallel & Sequence
+When building your workflows, you often know whether steps need to be run in `sequence` or can be sped up by running them in `parallel`.
+
+In ocw you can do both:
+```yaml
+# sequence.yaml
+name: Sequential workflow!
+sequence:
+  - name: Step a)
+    image: alpine
+    cmd: for i in $(seq 3); do echo "Processing... $i"; sleep 1; done
+  - name: Step b)
+    image: node:25-alpine
+    cmd: npx cowsay Second step!
+```
+
+When you run this workflow with `ocw sequence.yaml` the two steps will run one after another.
+
+This is great for when you build an image before using it. Or when you spin up a database, initialze it and then run your test-suite.
+
+Next, let's run something in parallel:
+```yaml
+# parallel.yaml
+name: Parallel workflow
+parallel:
+  - name: Step a) is happening...
+    image: alpine
+    cmd: for i in $(seq 10); do echo "Processing step a)... $i"; sleep 1; done
+  - name: ...while step b) is happening also
+    image: alpine
+    cmd: for i in $(seq 7); do echo "Processing step b)... $i"; sleep 1; done
+```
+
+## Nesting sequence & parallel
+But wait, it gets better! What if you first need to build a bunch of containers and then run a whole bunch of tests on them?
+
+Well, you can freely mix & match `sequence` and `parallel` steps to your heart's desire:
+
+```yaml
+# parallel-sequence-nested.yaml
+name: Sequence & Parallel mixed
+sequence:
+  - name: Build images
+    parallel:
+      - name: Build website
+        build:
+          image: ocw-tutorials/website
+          dockerfile: ./Dockerfiles/Dockerfile.website
+```
+
+
+
+## Switch-case
+
+## Inputs / Templating
+
+## Step outputs
+
+## `/workflow`
+
+## Jobs
+
+## Background containers
+
+## Importing workflows
+
+
+
+
+
+
+----
 > 🤖 First robot draft - needs human refinement
 
 This tutorial builds on the [basics tutorial](../basics/README.md). We'll cover the powerful features that make ocw great for real-world workflows.
@@ -622,5 +695,5 @@ You now know all the major features of ocw! Here are some things to explore:
 | `healthCheck`      | Wait for service to be ready                  |
 | `-e file.env`      | Load custom environment file                  |
 
-**Got feedback?**  
+**Got feedback?**
 [Join the community on Github](https://github.com/opencontainerworkflow/ocw/discussions) to ask questions, get help and share feedback.

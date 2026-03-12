@@ -1,0 +1,9 @@
+name: Sequence & Parallel mixed
+sequence:
+  - name: Build images
+    parallel:
+      - name: Build website
+        build:
+          image: ocw-tutorials/website
+          dockerfile: Dockerfile.website
+          context: /workflow/Dockerfiles

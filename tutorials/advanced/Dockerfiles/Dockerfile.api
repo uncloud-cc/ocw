@@ -1,0 +1,3 @@
+FROM node:25-alpine
+WORKDIR /workflow
+CMD ["npm", "install", "&&", "node", "server.js"]

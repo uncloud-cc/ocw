@@ -1,0 +1,3 @@
+FROM nginx
+# We're just copying website.html to the standard nginx location
+COPY website.html /usr/share/nginx/html/index.html

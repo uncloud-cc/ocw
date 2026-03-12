@@ -1,0 +1,1145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ocw.dev/schema.json",
+  "$defs": {
+    "BoolOrString": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "BooleanInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/boolean-input",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "type": {
+          "type": "string"
+        },
+        "default": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "required",
+        "type"
+      ]
+    },
+    "BuildConfig": {
+      "properties": {
+        "image": {
+          "type": "string"
+        },
+        "context": {
+          "type": "string",
+          "default": "/workspace"
+        },
+        "dockerfile": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "buildArgs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "platform": {
+          "$ref": "#/$defs/StringOrStringSlice"
+        },
+        "cacheFrom": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cacheTo": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "noCache": {
+          "type": "boolean"
+        },
+        "noCacheFilter": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "output": {
+          "$ref": "#/$defs/BuildOutput"
+        },
+        "push": {
+          "type": "boolean"
+        },
+        "load": {
+          "type": "boolean"
+        },
+        "pull": {
+          "type": "boolean"
+        },
+        "secrets": {
+          "$ref": "#/$defs/BuildSecrets"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "annotation": {
+          "$ref": "#/$defs/StringMapOrSlice"
+        },
+        "shmSize": {
+          "type": "string"
+        },
+        "ulimit": {
+          "additionalProperties": {
+            "$ref": "#/$defs/NumberOrString"
+          },
+          "type": "object"
+        },
+        "progress": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "quiet",
+            "plain",
+            "tty",
+            "rawjson"
+          ]
+        },
+        "quiet": {
+          "type": "boolean"
+        },
+        "provenance": {
+          "$ref": "#/$defs/BoolOrString"
+        },
+        "sbom": {
+          "$ref": "#/$defs/BoolOrString"
+        },
+        "attest": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "metadataFile": {
+          "type": "string"
+        },
+        "iidfile": {
+          "type": "string"
+        },
+        "buildContext": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "image"
+      ]
+    },
+    "BuildOutput": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "docker",
+                "image",
+                "local",
+                "tar",
+                "oci",
+                "registry"
+              ]
+            },
+            "dest": {
+              "type": "string"
+            },
+            "push": {
+              "type": "boolean"
+            },
+            "compression": {
+              "type": "string",
+              "enum": [
+                "gzip",
+                "estargz",
+                "zstd",
+                "uncompressed"
+              ]
+            },
+            "compressionLevel": {
+              "type": "number",
+              "maximum": 9,
+              "minimum": 0
+            },
+            "forceCompression": {
+              "type": "boolean"
+            },
+            "ociMediatypes": {
+              "type": "boolean"
+            },
+            "annotation": {
+              "properties": {},
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "items": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "image",
+                  "local",
+                  "tar",
+                  "oci",
+                  "registry"
+                ]
+              },
+              "dest": {
+                "type": "string"
+              },
+              "push": {
+                "type": "boolean"
+              },
+              "compression": {
+                "type": "string",
+                "enum": [
+                  "gzip",
+                  "estargz",
+                  "zstd",
+                  "uncompressed"
+                ]
+              },
+              "compressionLevel": {
+                "type": "number",
+                "maximum": 9,
+                "minimum": 0
+              },
+              "forceCompression": {
+                "type": "boolean"
+              },
+              "ociMediatypes": {
+                "type": "boolean"
+              },
+              "annotation": {
+                "properties": {},
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "type"
+            ]
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "BuildSecrets": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        {
+          "items": {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "src": {
+                "type": "string"
+              },
+              "env": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id"
+            ]
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "BuildStep": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/build-step",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "config": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "type": "object"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SecretValue"
+          },
+          "type": "object"
+        },
+        "needs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "build": {
+          "$ref": "#/$defs/BuildConfig"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "build"
+      ]
+    },
+    "ChoiceInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/choice-input",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "type": {
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "minItems": 1
+        },
+        "default": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "required",
+        "type",
+        "options"
+      ]
+    },
+    "Expose": {
+      "properties": {
+        "Ports": {
+          "items": {
+            "$ref": "#/$defs/ExposePort"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "Ports"
+      ]
+    },
+    "ExposePort": {
+      "properties": {
+        "containerPort": {
+          "type": "integer",
+          "maximum": 65535,
+          "minimum": 1
+        },
+        "hostPort": {
+          "type": "integer",
+          "maximum": 65535,
+          "minimum": 1
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "http",
+            "https",
+            "tcp",
+            "udp"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "containerPort"
+      ]
+    },
+    "HealthCheck": {
+      "properties": {
+        "cmd": {
+          "type": "string"
+        },
+        "interval": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "string"
+        },
+        "retries": {
+          "type": "integer"
+        },
+        "startPeriod": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "cmd"
+      ]
+    },
+    "InheritConfig": {
+      "properties": {
+        "secrets": {
+          "type": "string",
+          "enum": [
+            "none",
+            "all"
+          ],
+          "default": "none"
+        },
+        "env": {
+          "type": "string",
+          "enum": [
+            "none",
+            "all"
+          ],
+          "default": "none"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "secrets",
+        "env"
+      ]
+    },
+    "Input": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/StringInput"
+        },
+        {
+          "$ref": "#/$defs/NumberInput"
+        },
+        {
+          "$ref": "#/$defs/BooleanInput"
+        },
+        {
+          "$ref": "#/$defs/ChoiceInput"
+        }
+      ]
+    },
+    "Job": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "parallel": {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "type": "array"
+        },
+        "sequence": {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "type": "array"
+        },
+        "switch": {
+          "type": "string"
+        },
+        "case": {
+          "additionalProperties": {
+            "$ref": "#/$defs/StepOrSteps"
+          },
+          "type": "object"
+        },
+        "default": {
+          "$ref": "#/$defs/StepOrSteps"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Jobs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Job"
+      },
+      "type": "object"
+    },
+    "NumberInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/number-input",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "type": {
+          "type": "string"
+        },
+        "default": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "required",
+        "type"
+      ]
+    },
+    "NumberOrString": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "ParallelStep": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/parallel-step",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "config": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "type": "object"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SecretValue"
+          },
+          "type": "object"
+        },
+        "needs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "parallel": {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "parallel"
+      ]
+    },
+    "RunStep": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/run-step",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "config": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "type": "object"
+        },
+        "env": {
+          "$ref": "#/$defs/StringMapOrSlice"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SecretValue"
+          },
+          "type": "object"
+        },
+        "needs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "image": {
+          "type": "string"
+        },
+        "cmd": {
+          "type": "string"
+        },
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "entrypoint": {
+          "type": "string"
+        },
+        "workdir": {
+          "type": "string"
+        },
+        "background": {
+          "type": "boolean"
+        },
+        "healthCheck": {
+          "$ref": "#/$defs/HealthCheck"
+        },
+        "expose": {
+          "$ref": "#/$defs/Expose"
+        },
+        "envFile": {
+          "$ref": "#/$defs/StringOrStringSlice"
+        },
+        "cpus": {
+          "$ref": "#/$defs/NumberOrString"
+        },
+        "memory": {
+          "type": "string"
+        },
+        "gpus": {
+          "$ref": "#/$defs/NumberOrString"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "pull": {
+          "type": "string",
+          "enum": [
+            "always",
+            "missing",
+            "never"
+          ]
+        },
+        "quiet": {
+          "type": "boolean"
+        },
+        "tty": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "image"
+      ]
+    },
+    "SecretValue": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "properties": {
+            "secure": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "secure"
+          ]
+        }
+      ]
+    },
+    "SequenceStep": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/sequence-step",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "config": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "type": "object"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SecretValue"
+          },
+          "type": "object"
+        },
+        "needs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sequence": {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "sequence"
+      ]
+    },
+    "Step": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RunStep"
+        },
+        {
+          "$ref": "#/$defs/BuildStep"
+        },
+        {
+          "$ref": "#/$defs/ParallelStep"
+        },
+        {
+          "$ref": "#/$defs/SequenceStep"
+        },
+        {
+          "$ref": "#/$defs/WorkflowStep"
+        },
+        {
+          "$ref": "#/$defs/SwitchStep"
+        }
+      ]
+    },
+    "StepOrSteps": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Step"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "StringInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/string-input",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "type": {
+          "type": "string",
+          "default": "string"
+        },
+        "default": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "minLength": {
+          "type": "integer"
+        },
+        "maxLength": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "required",
+        "type"
+      ]
+    },
+    "StringMapOrSlice": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "StringOrStringSlice": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "SwitchStep": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/switch-step",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "config": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "type": "object"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SecretValue"
+          },
+          "type": "object"
+        },
+        "needs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "switch": {
+          "type": "string"
+        },
+        "case": {
+          "additionalProperties": {
+            "$ref": "#/$defs/StepOrSteps"
+          },
+          "type": "object"
+        },
+        "default": {
+          "$ref": "#/$defs/StepOrSteps"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "switch",
+        "case"
+      ]
+    },
+    "WorkflowConfig": {
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SecretValue"
+          },
+          "type": "object"
+        },
+        "inherit": {
+          "$ref": "#/$defs/InheritConfig"
+        },
+        "inputs": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "from"
+      ]
+    },
+    "WorkflowStep": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/workflow-step",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "config": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "type": "object"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SecretValue"
+          },
+          "type": "object"
+        },
+        "needs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workflow": {
+          "$ref": "#/$defs/WorkflowConfig"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "workflow"
+      ]
+    }
+  },
+  "properties": {
+    "schemaVersion": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "config": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "type": "object"
+    },
+    "inputs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Input"
+      },
+      "type": "object"
+    },
+    "env": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "secrets": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SecretValue"
+      },
+      "type": "object"
+    },
+    "outputs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "jobs": {
+      "$ref": "#/$defs/Jobs"
+    },
+    "parallel": {
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "type": "array"
+    },
+    "sequence": {
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "type": "array"
+    },
+    "switch": {
+      "type": "string"
+    },
+    "case": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StepOrSteps"
+      },
+      "type": "object"
+    },
+    "default": {
+      "$ref": "#/$defs/StepOrSteps"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "name"
+  ],
+  "title": "OCW Workflow Schema",
+  "description": "Open Container Workflow schema definition"
+}

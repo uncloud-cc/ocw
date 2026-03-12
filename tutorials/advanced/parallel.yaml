@@ -1,13 +1,8 @@
-name: Parallel Checks
+name: Parallel workflow
 parallel:
-  - name: Check Node
-    image: node:20-alpine
-    cmd: node --version
-
-  - name: Check Python
-    image: python:3.12-alpine
-    cmd: python --version
-
-  - name: Check Go
-    image: golang:1.22-alpine
-    cmd: go version
+  - name: Step a) is happening...
+    image: alpine
+    cmd: for i in $(seq 10); do echo "Processing step a)... $i"; sleep 1; done
+  - name: ...while step b) is happening also
+    image: alpine
+    cmd: for i in $(seq 7); do echo "Processing step b)... $i"; sleep 1; done
