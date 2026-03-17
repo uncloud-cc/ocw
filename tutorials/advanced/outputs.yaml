@@ -1,0 +1,25 @@
+name: Step Outputs
+outputs:
+  version: "{{ steps.version.version }}"
+  image: "{{ steps.build.timestamp }}"
+
+sequence:
+  - name: Generate Version
+    id: version
+    image: alpine:latest
+    cmd: |
+      echo "version=1.0.0" >> $OUTPUTS
+      echo "Generated version"
+
+  - name: Generate Build
+    id: build
+    image: alpine:latest
+    cmd: |
+      echo "timestamp=$(date -u +%Y-%m-%d)" >> $OUTPUTS
+      echo "Generated timestamp"
+
+  - name: Display Results
+    image: alpine:latest
+    cmd: |
+      echo "Version: {{ steps.version.version }}"
+      echo "Build Time: {{ steps.build.timestamp }}"
