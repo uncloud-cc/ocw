@@ -1,0 +1,8 @@
+name: Exposing containers
+sequence:
+  - name: Start Web Server
+    id: webserver
+    image: node:25-alpine
+    background: true
+    cmd: sh -c "echo '<h1>Hello from the dev server 👩🏻‍💻</h1>' > index.html && npx serve -p 8080"
+    expose: 8080 # Container port 8080 → localhost:8080

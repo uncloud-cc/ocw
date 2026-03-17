@@ -2,6 +2,12 @@
 
 Container-native workflows for local development & CI/CD.
 
+## `<RemoveBeforeRelease`>
+**Out of scope for now:**
+- `inputs` >> `env` and `secrets` are enough - we can add validation options later to automatically validate `env / secrets`
+- `secrets` being set inline inside the files (secrets are just configured so we know which values to mask in logs but are passed in via `.env` or the implementing platform)
+- Invoking other workflows / importing them from Github >> Waaaaayyyy advanced right now!
+
 ## Install
 
 Make sure you have these two installed:

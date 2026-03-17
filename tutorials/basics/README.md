@@ -2,13 +2,11 @@
 
 ocw is a simple to use workflow engine that lets you build workflows out of containers.
 
-Workflows\* essentially do just two things: **Build containers** and **run containers** - that's pretty much it. Everything else around it is just to make your life easier.
+ocw workflows essentially do just two things: **Build containers** and **run containers** - that's pretty much it. Everything else around it is just to make your life easier.
 
 ocw is also designed for security with _immutable workspaces_, _outgoing network filters_, is configured to be _jailbreak-proof_, runs _rootless_ and it built on top of [Podman](https://podman.io/) which is an open-source container runtime built with security in mind.
 
-> **At the moment ocw is still in early stages** and many of the security features aren't implemented yet!
-
-> (\*) When we talk about _workflows_ in the context of these docs we almost always mean _ocw workflows_. But since you're a smart 🍪 you probably already knew that :)
+> **At the moment ocw is still in early stages** and many of the security features aren't implemented yet! Checkout the [ocw roadmap](https://github.com/orgs/opencontainerworkflow/projects/1) for details.
 
 ## Setup
 

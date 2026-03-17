@@ -1,0 +1,10 @@
+name: Networking demo
+sequence:
+  - name: Start Redis
+    id: redis # This becomes the hostname
+    image: redis:7-alpine
+    background: true
+
+  - name: Use Redis
+    image: redis:7-alpine
+    cmd: redis-cli -h redis SET hello world # Connect via hostname "redis"

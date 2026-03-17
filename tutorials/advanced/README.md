@@ -1,11 +1,18 @@
 # Open Container Workflow (ocw) Advanced
-This is the second tutorial where we dive into advanced features of ocw workflows. Make sure you have the [ocw cli](../basics/README.md#setup) and [Podman](https://podman.io/docs/installation) setup to follow along.
+This is the second tutorial where we dive into advanced features of ocw workflows. Check-out the [basics tutorial](../basics/README.md) to get an overview of ocw.
+
+Make sure you have the [ocw cli](../basics/README.md#setup) and [Podman](https://podman.io/docs/installation) installed to follow along.
+
+**Table of contents**\
+TODO
 
 ## Parallel & Sequence
-When building your workflows, you often know whether steps need to be run in `sequence` or can be sped up by running them in `parallel`.
+In ocw, steps either run as a `sequence` or in `parallel`. You can also nest the two to express any workflow that comes to mind.
 
-In ocw you can do both:
-```yaml
+Let's start by seeing a `sequence` in action:
+
+
+```yaml\
 # sequence.yaml
 name: Sequential workflow!
 sequence:
@@ -19,7 +26,7 @@ sequence:
 
 When you run this workflow with `ocw sequence.yaml` the two steps will run one after another.
 
-This is great for when you build an image before using it. Or when you spin up a database, initialze it and then run your test-suite.
+This is great for sequential workflows - like first building a container and then running it.
 
 Next, let's run something in parallel:
 ```yaml
@@ -34,40 +41,245 @@ parallel:
     cmd: for i in $(seq 7); do echo "Processing step b)... $i"; sleep 1; done
 ```
 
-## Nesting sequence & parallel
-But wait, it gets better! What if you first need to build a bunch of containers and then run a whole bunch of tests on them?
+As expected both steps run at the same time and the workflow ends when both have ended. This can be great for you have multiple test-suites and you want to run them all in parallel.
 
-Well, you can freely mix & match `sequence` and `parallel` steps to your heart's desire:
+## Nesting Parallel and Sequence
+
+You can nest `parallel` inside `sequence` (and vice versa) to create sophisticated workflows:
 
 ```yaml
-# parallel-sequence-nested.yaml
-name: Sequence & Parallel mixed
+# nested.yaml
+name: CI Pipeline
 sequence:
-  - name: Build images
+  - name: Setup
+    image: alpine:latest
+    cmd: echo "Setting up..."
+
+  - name: Run Tests in Parallel
     parallel:
-      - name: Build website
-        build:
-          image: ocw-tutorials/website
-          dockerfile: ./Dockerfiles/Dockerfile.website
+      - name: Unit Tests
+        image: node:20-alpine
+        cmd: echo "Running unit tests..."
+
+      - name: Integration Tests
+        image: node:20-alpine
+        cmd: echo "Running integration tests..."
+
+      - name: Lint
+        image: node:20-alpine
+        cmd: echo "Running linter..."
+
+  - name: Build
+    image: node:20-alpine
+    cmd: echo "Building (only after all tests pass)..."
+
+  - name: Deploy
+    image: alpine:latest
+    cmd: echo "Deploying..."
 ```
 
+The tests run in parallel, but the build only starts after all tests pass.
 
+## Templating
+Templating make your ocw workflows dynamic. You've already seen `{{ steps.build.image }}` in the basics tutorial - let's explore all the possibilities.
 
-## Switch-case
+Template expressions use double curly braces: `{{ namespace.key }}`. They can be used in almost any string field in your workflow.
 
-## Inputs / Templating
+```yaml
+# templates.yaml
+name: Template Demo
+sequence:
+  - name: Show Templates
+    image: alpine:latest
+    cmd: |
+      echo "Workflow: {{ workflow.name }}"
+      echo "User: {{ env.USER }}"
+      echo "Home: {{ env.HOME }}"
+```
+
+Run it with `ocw templates.yaml`:
+
+```
+▶ Show Templates [run]
+  │ Workflow: Template Demo
+  │ User: jonaspeeck
+  │ Home: /Users/jonaspeeck
+✓ Show Templates completed
+```
+
+### Available Namespaces
+
+Here's everything you can reference in templates:
+
+| Template              | Description                   |
+| --------------------- | ----------------------------- |
+| `{{ workflow.name }}` | Name of the workflow          |
+| `{{ job.name }}`      | Name of the current job       |
+| `{{ env.VARNAME }}`   | Environment variable          |
+| `{{ secrets.NAME }}`  | Secret value (from .env file) |
+| `{{ steps.ID.KEY }}`  | Output from a previous step   |
+
+Templates work in most string fields including:
+
+- `image`, `cmd`, `entrypoint`, `args[]`
+- `env` values, `workdir`
+- Build options: `dockerfile`, `context`, `target`, `tags[]`, `buildArgs`
+- Switch expressions
+
+## Conditionals (switch / case)
+
+Sometimes you need different behavior based on a value. The `switch/case` construct lets you branch your workflow:
+
+```yaml
+# switch.yaml
+name: Environment Deploy
+
+# Run with different DEPLOY_ENV values:
+#   DEPLOY_ENV=staging ocw switch.yaml     → uses staging case
+#   DEPLOY_ENV=production ocw switch.yaml  → uses production case
+
+switch: "{{ env.DEPLOY_ENV }}"
+case:
+  staging:
+    - name: Deploy to Staging
+      image: alpine:latest
+      cmd: echo "Deploying to staging environment..."
+
+  production:
+    - name: Deploy to Production
+      image: alpine:latest
+      cmd: |
+        echo "Deploying to production environment..."
+        echo "Running extra safety checks..."
+
+default:
+  - name: Deploy to Development
+    image: alpine:latest
+    cmd: echo "Deploying to development (default)..."
+```
+
+Run it with different environments:
+
+```bash
+# Uses staging case
+DEPLOY_ENV=staging ocw switch.yaml
+
+# Uses production case
+DEPLOY_ENV=production ocw switch.yaml
+```
+
+The `switch` expression supports any template, so you can base decisions on:
+
+- Environment variables: `{{ env.BRANCH }}`
+- Step outputs: `{{ steps.check.result }}`
+- Inputs: `{{ inputs.environment }}`
+
+Each case can contain a single step or multiple steps in sequence. If the value doesn't match any case, the `default` case runs.
+
+## Jobs
+
+So far, our workflows have had a single entry point. But real projects need multiple commands: build, test, dev, deploy. Jobs let you define named entry points in one file:
+
+```yaml
+# jobs.yaml
+name: My Project
+
+jobs:
+  build:
+    name: Build the App
+    sequence:
+      - name: Install
+        image: node:20-alpine
+        cmd: echo "Installing dependencies..."
+
+      - name: Build
+        image: node:20-alpine
+        cmd: echo "Building..."
+
+  test:
+    name: Run Tests
+    parallel:
+      - name: Unit Tests
+        image: node:20-alpine
+        cmd: echo "Running unit tests..."
+
+      - name: Lint
+        image: node:20-alpine
+        cmd: echo "Running linter..."
+
+  dev:
+    name: Development Server
+    sequence:
+      - name: Start Dev
+        image: node:20-alpine
+        cmd: echo "Starting dev server on http://localhost:3000..."
+```
+
+Now you have multiple commands:
+
+```bash
+# List available jobs
+ocw
+# Output:
+#   jobs.yaml:
+#     - build (Build the App)
+#     - test (Run Tests)
+#     - dev (Development Server)
+
+# Run specific jobs
+ocw build
+ocw test
+ocw dev
+```
+
+This replaces the need for Makefiles, npm scripts, or docker-compose for many use cases.
 
 ## Step outputs
 
 ## `/workflow`
 
-## Jobs
 
-## Background containers
+## Exposing containers
+For development environments, you often need to access services from your host machine. The `expose` option makes container ports accessible:
 
-## Importing workflows
+```yaml
+# expose.yaml
+name: Exposing containers
+sequence:
+  - name: Start Web Server
+    id: webserver
+    image: node:25-alpine
+    background: true
+    cmd: sh -c "echo '<h1>Hello from the dev server 👩🏻‍💻</h1>' > index.html && npx serve -p 8080"
+    expose: 8080 # Container port 8080 → localhost:8080
+```
 
+You can also map to a different host port:
 
+```yaml
+expose:
+  - containerPort: 80
+    hostPort: 8080 # Container port 80 → localhost:8080
+    protocol: http
+```
+
+## Container networking
+
+Background containers can be reached by other containers using their `id` as the hostname:
+
+```yaml
+# networking.yaml
+name: Networking demo
+sequence:
+  - name: Start Redis
+    id: redis # This becomes the hostname
+    image: redis:7-alpine
+    background: true
+
+  - name: Use Redis
+    image: redis:7-alpine
+    cmd: redis-cli -h redis SET hello world # Connect via hostname "redis"
+```
 
 
 
