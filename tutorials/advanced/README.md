@@ -276,7 +276,7 @@ outputs:
   image: "{{ steps.build.image }}"
 ```
 
-They are displayed at the bottom of the workflow run:
+Workflow outputs are displayed the bottom of the workflow run:
 
 ```yaml
   Outputs
@@ -286,8 +286,68 @@ They are displayed at the bottom of the workflow run:
 
 ```
 
-## `/workflow`
-TODO
+## Understanding the `/workflow` mounted folder
+The parent folder of workflow files is automatically mounted as `/workflow` inside the containers.
+
+For `build` steps, it's the default `context`.\
+For `run` steps, it's the default workdir.
+
+Let's first see what that looks like for a `run` step:
+```yaml
+# pwd.yaml
+name: /workdir example
+sequence:
+  - name: Print current directory & contents
+    image: alpine:latest
+    cmd: |
+      echo "Current folder:"
+      pwd
+      echo "---"
+      echo "Contents:"
+      ls
+```
+
+Running this with `ocw pwd.yaml`, this outputs the `/workflow` dir as the (default) working directory and its contents:
+
+```bash
+▶ Pwd & /workdir contents [run]
+  Image: alpine:latest
+  Image exists: alpine:latest
+  │ Current folder:
+  │ /workflow
+  │ ---
+  │ Contents:
+  │ Dockerfiles
+  │ README.md
+  │ demo-build-patterns.yaml
+  │ expose.yaml
+  │ index.html
+  │ jobs.yaml
+  │ nested.yaml
+  │ networking.yaml
+  │ old stuff
+  │ outputs.yaml
+  │ parallel.yaml
+  │ pwd.yaml
+  │ sequence.yaml
+  │ switch.yaml
+  │ templates.yaml
+```
+
+For every `run` step, the `/workflow` dir contains the contents of the workflow file's parent folder and is the default dir.
+
+You can also set a different working directory by specify it as `workdir`:
+
+```yaml
+- name: Install Dependencies
+  image: node:25-alpine
+  workdir: /workflow/backend    # Changes working directory to backend
+  cmd: npm install
+```
+
+Now let's see the `build` step in action:
+
+__TODO__
 
 ## `env` and `secrets`
 TODO
