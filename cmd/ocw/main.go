@@ -19,6 +19,32 @@ var (
 	version = "dev"
 )
 
+// reorderArgs reorders command line arguments so that flags come before positional args.
+// This allows flags to be placed anywhere: ocw myjob --show-secrets works the same as ocw --show-secrets myjob
+func reorderArgs(args []string) []string {
+	var flags []string
+	var positional []string
+
+	i := 0
+	for i < len(args) {
+		arg := args[i]
+		// Check if it's a flag (starts with -)
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+			// Check if this flag takes a value (next arg doesn't start with -)
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+				flags = append(flags, args[i])
+			}
+		} else {
+			positional = append(positional, arg)
+		}
+		i++
+	}
+
+	return append(flags, positional...)
+}
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -27,7 +53,7 @@ func main() {
 }
 
 func run() error {
-	// Define flags
+	// Define flags first (before parsing)
 	validateOnly := flag.Bool("validate", false, "Only validate the workflow file, don't run it")
 	workflowFile := flag.String("f", "", "Workflow file to use (default: auto-discover)")
 	envFile := flag.String("e", "", "Environment file to load (default: .env)")
@@ -54,7 +80,10 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "  ocw -show-secrets dev       Run 'dev' job showing secret values\n")
 	}
 
-	flag.Parse()
+	// Reorder args to support flags anywhere in the command line
+	// Move all flags (starting with -) before positional arguments
+	reorderedArgs := reorderArgs(os.Args[1:])
+	flag.CommandLine.Parse(reorderedArgs)
 
 	if *showVersion {
 		fmt.Printf("ocw version %s\n", version)
