@@ -1,0 +1,10 @@
+name: Demo build
+outputs:
+  image: "{{ steps.build.image }}"
+sequence:
+  - name: Build the api image
+    id: build
+    build:
+      image: ocw-tutorial/api
+      dockerfile: ./api/Dockerfile
+      context: ./api

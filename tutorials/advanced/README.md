@@ -347,7 +347,20 @@ You can also set a different working directory by specify it as `workdir`:
 
 Now let's see the `build` step in action:
 
-__TODO__
+```yaml
+# build.yaml
+name: Demo build
+outputs:
+  image: "{{ steps.build.image }}"
+sequence:
+  - name: Build the api image
+    id: build
+    build:
+      image:
+      dockerfile: ./api/Dockerfiles
+      context: ./api
+
+```
 
 ## `env` and `secrets`
 TODO

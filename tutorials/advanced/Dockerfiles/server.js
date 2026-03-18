@@ -4,7 +4,7 @@ const url = require('url');
 // In-memory data store for demo purposes
 let items = [
   { id: 1, name: 'Item 1', description: 'First item' },
-  { id: 2, name: 'Item 2', description: 'Second item' }
+  { id: 2, name: 'Item 2', description: 'Second item' },
 ];
 let nextId = 3;
 
@@ -42,8 +42,8 @@ const requestHandler = async (req, res) => {
   try {
     // Root endpoint - Hello World
     if (path === '/' && method === 'GET') {
-      sendJSON(res, 200, { 
-        message: 'Hello World!', 
+      sendJSON(res, 200, {
+        message: 'Hello World!',
         version: '1.0.0',
         endpoints: [
           'GET /',
@@ -74,7 +74,7 @@ const requestHandler = async (req, res) => {
       const id = parseInt(path.split('/')[3]);
       const body = await parseBody(req);
       const itemIndex = items.findIndex(item => item.id === id);
-      
+
       if (itemIndex === -1) {
         sendJSON(res, 404, { success: false, error: 'Item not found' });
       } else {
@@ -90,7 +90,7 @@ const requestHandler = async (req, res) => {
     else if (path.match(/^\/api\/items\/\d+$/) && method === 'DELETE') {
       const id = parseInt(path.split('/')[3]);
       const itemIndex = items.findIndex(item => item.id === id);
-      
+
       if (itemIndex === -1) {
         sendJSON(res, 404, { success: false, error: 'Item not found' });
       } else {
