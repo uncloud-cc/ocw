@@ -385,7 +385,96 @@ Notice how we're setting the context to the subfolder `./context`:
 By default, the `build` steps also have the `/workflow` folder mounted and have this as their default working directory.
 
 ## `env` and `secrets`
-TODO
+
+Use `env` for configuration and `secrets` for sensitive values. **A `.env` file sets both** - all values are available as `{{ env.NAME }}` and `{{ secrets.NAME }}`.
+
+```yaml
+# env-secrets.yaml
+name: Environment and Secrets Demo
+
+# Workflow-level env (available to all steps)
+env:
+  NODE_ENV: development
+
+sequence:
+  - name: Show Env and Secrets
+    image: alpine:latest
+    cmd: |
+      echo "Env: {{ env.APP_NAME }} v{{ env.APP_VERSION }}"
+      echo "Secret: {{ secrets.API_KEY }}"
+
+  - name: Step-Level Override
+    image: alpine:latest
+    env:
+      NODE_ENV: production  # Overrides workflow-level
+    cmd: echo "NODE_ENV=$NODE_ENV"
+```
+
+Create a `.env` file in the workflow directory:
+
+```bash
+# .env
+APP_NAME=my-cool-app
+APP_VERSION=1.0.0
+API_KEY=sk-test-12345
+DB_PASSWORD=supersecret
+```
+
+Run with `ocw env-secrets.yaml`.
+
+**Priority** (highest first): step-level `env` → workflow-level `env` → `.env` file
+
+Use `-e filename.env` to load a different env file.
+  - name: Use in URLs
+    image: alpine:latest
+    env:
+      DATABASE_URL: "postgresql://user:{{ secrets.DB_PASSWORD }}@localhost:5432/mydb"
+    cmd: echo "Connecting to: $DATABASE_URL"
+```
+
+Create the `.env` file:
+
+```bash
+# .env
+APP_NAME=my-cool-app
+APP_VERSION=1.0.0
+API_KEY=sk-test-12345
+DB_PASSWORD=mydbpass123
+```
+
+Run it:
+
+```bash
+ocw env-secrets.yaml
+```
+
+**Output:**
+
+```
+▶ Show Environment Variables [run]
+  │ From env: NODE_ENV=development, BUILD_TARGET=local
+  │ From .env: APP_NAME=my-cool-app
+✓ Show Environment Variables completed
+
+▶ Show Secrets [run]
+  │ API Key: sk-test-12345
+✓ Show Secrets completed
+
+▶ Step-Level Override [run]
+  │ NODE_ENV is now: production
+✓ Step-Level Override completed
+
+▶ Use in URLs [run]
+  │ Connecting to: postgresql://user:mydbpass123@localhost:5432/mydb
+✓ Use in URLs completed
+```
+
+### Key Points
+
+- **`.env` files set both env and secrets** - use whichever makes semantic sense in your templates
+- Use `-e filename.env` flag to load a different env file (e.g., `-e production.env`)
+- Step-level `env` overrides workflow-level `env`
+- Reference in templates anywhere: `cmd`, `image`, `env` values, build args, etc.
 
 ## Exposing containers
 For development environments, you often need to access services from your host machine. The `expose` option makes container ports accessible:
