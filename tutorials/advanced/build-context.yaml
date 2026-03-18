@@ -1,16 +1,14 @@
-name: Demo build
-outputs:
-  image: "{{ steps.build.image }}"
+name: Build context
 sequence:
-  - name: Building image with default /workdir
+  - name: Build the container
     id: build
     build:
-      image: ocw-tutorial/build-context
-      dockerfile: ./context/Dockerfile
+      image: ocw-tutorials/context
+      dockerfile: context/Dockerfile
+      context: ./context
 
-  - name: Setting the context
-    id: build
-    build:
-      image: ocw-tutorial/build-context
-      dockerfile: ./context/Dockerfile
-      context: ./context # Notice that we're setting the context here
+  - name: Run the container
+    id: run
+    image: "{{ steps.build.image }}"
+    background: true
+    expose: 80

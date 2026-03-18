@@ -349,17 +349,40 @@ Now let's see how the `/worflow` folder is made available in `build` steps:
 
 ```yaml
 # build-context.yaml
-name: Demo build
-outputs:
-  image: "{{ steps.build.image }}"
+name: Build context
 sequence:
-  - name: Build the api image
+  - name: Build the container
     id: build
     build:
-      image:
-      dockerfile: ./api/Dockerfiles
-      context: ./api
+      image: ocw-tutorials/context
+      dockerfile: context/Dockerfile
+      context: ./context
+
+  - name: Run the container
+    id: run
+    image: "{{ steps.build.image }}"
+    background: true
+    expose: 80
 ```
+
+The Dockerfile in question, merely copies a HTML file into the right place:
+```Dockerfile
+FROM nginx
+COPY hello.html /usr/share/nginx/html/index.html
+EXPOSE 80
+```
+
+Notice how we're setting the context to the subfolder `./context`:
+```yaml
+- name: Build the container
+    id: build
+    build:
+      image: ocw-tutorials/context
+      dockerfile: context/Dockerfile
+      context: ./context
+```
+
+By default, the `build` steps also have the `/workflow` folder mounted and have this as their default working directory.
 
 ## `env` and `secrets`
 TODO
