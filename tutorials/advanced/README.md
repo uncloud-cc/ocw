@@ -294,7 +294,7 @@ For `run` steps, it's the default workdir.
 
 Let's first see what that looks like for a `run` step:
 ```yaml
-# pwd.yaml
+# context.yaml
 name: /workdir example
 sequence:
   - name: Print current directory & contents
@@ -345,10 +345,10 @@ You can also set a different working directory by specify it as `workdir`:
   cmd: npm install
 ```
 
-Now let's see the `build` step in action:
+Now let's see how the `/worflow` folder is made available in `build` steps:
 
 ```yaml
-# build.yaml
+# build-context.yaml
 name: Demo build
 outputs:
   image: "{{ steps.build.image }}"
@@ -359,7 +359,6 @@ sequence:
       image:
       dockerfile: ./api/Dockerfiles
       context: ./api
-
 ```
 
 ## `env` and `secrets`
