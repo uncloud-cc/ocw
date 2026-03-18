@@ -34,6 +34,7 @@ func run() error {
 	inputsFile := flag.String("i", "", "Inputs file to load (YAML format)")
 	showVersion := flag.Bool("version", false, "Show version")
 	help := flag.Bool("help", false, "Show help")
+	showSecrets := flag.Bool("show-secrets", false, "Show secret values in output (unmask secrets)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "ocw - Open Container Workflow CLI\n\n")
@@ -50,6 +51,7 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "  ocw -e staging.env dev      Run 'dev' job with staging.env\n")
 		fmt.Fprintf(os.Stderr, "  ocw -i inputs.yaml deploy   Run 'deploy' job with inputs from YAML\n")
 		fmt.Fprintf(os.Stderr, "  ocw -validate -f my.yaml    Validate a workflow file\n")
+		fmt.Fprintf(os.Stderr, "  ocw -show-secrets dev       Run 'dev' job showing secret values\n")
 	}
 
 	flag.Parse()
@@ -157,6 +159,9 @@ func run() error {
 	}
 	if *inputsFile != "" {
 		r.WithInputsFile(*inputsFile)
+	}
+	if *showSecrets {
+		r.WithShowSecrets(true)
 	}
 
 	if jobName != "" {

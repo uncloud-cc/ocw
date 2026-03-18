@@ -82,6 +82,10 @@ type Runner struct {
 	templateCtx *TemplateContext
 	// styles provides styled output formatting
 	styles *Styles
+	// secretEnvKeys tracks which env keys are marked as secrets (for masking)
+	secretEnvKeys map[string]bool
+	// showSecrets disables secret masking when true
+	showSecrets bool
 }
 
 // NewRunner creates a new workflow runner
@@ -93,12 +97,13 @@ func NewRunner(workflowDir string) *Runner {
 	return &Runner{
 		WorkflowDir:          workflowDir,
 		Output:               output,
-		podman:               NewPodman(output, styles),
+		podman:               NewPodman(output, styles, nil),
 		builtImages:          make(map[string]string),
 		backgroundContainers: make([]string, 0),
 		exposedServices:      make([]ExposedService, 0),
 		templateCtx:          NewTemplateContext(),
 		styles:               styles,
+		secretEnvKeys:        make(map[string]bool),
 	}
 }
 
@@ -114,9 +119,33 @@ func (r *Runner) WithInputsFile(inputsFile string) *Runner {
 	return r
 }
 
+// WithShowSecrets sets whether to show secret values in output (disable masking)
+func (r *Runner) WithShowSecrets(show bool) *Runner {
+	r.showSecrets = show
+	return r
+}
+
 // loadDotEnv loads .env file from the workflow directory and populates
-// the template context with env vars and secrets
-func (r *Runner) loadDotEnv() error {
+// the template context with env vars and secrets.
+// Workflow env vars are loaded first as defaults, then .env overrides them.
+func (r *Runner) loadDotEnv(workflowEnv schema.Env) error {
+	// Collect all secret values for masking (defaults + overrides)
+	var secretValues []string
+
+	// First, load workflow env vars as defaults
+	for key, envVar := range workflowEnv {
+		r.templateCtx.Env[key] = envVar.Value
+		if envVar.IsSecret {
+			r.secretEnvKeys[key] = true
+			r.templateCtx.Secrets[key] = envVar.Value
+			// Collect default secret value for masking (if not empty)
+			if envVar.Value != "" {
+				secretValues = append(secretValues, envVar.Value)
+			}
+		}
+	}
+
+	// Load .env file to override workflow defaults
 	var dotenv *DotEnv
 	var err error
 	var envFileName string
@@ -135,11 +164,27 @@ func (r *Runner) loadDotEnv() error {
 		return err
 	}
 
-	// Load all vars into both Env and Secrets
-	// This allows .env values to be referenced as either {{ env.X }} or {{ secrets.X }}
+	// Override workflow defaults with .env values
 	for key, value := range dotenv.Vars {
-		r.templateCtx.Env[key] = value
-		r.templateCtx.Secrets[key] = value
+		// Check if this key was marked as a secret in workflow
+		if r.secretEnvKeys[key] {
+			// It's a secret - update both env and secrets context
+			r.templateCtx.Env[key] = value
+			r.templateCtx.Secrets[key] = value
+			// Collect .env secret value for masking
+			secretValues = append(secretValues, value)
+		} else {
+			// Regular env var - only update env context
+			r.templateCtx.Env[key] = value
+		}
+	}
+
+	// Set secrets on podman client for masking (all secret values)
+	// Only mask if showSecrets is false
+	if !r.showSecrets {
+		r.podman.SetSecrets(secretValues)
+	} else {
+		r.podman.SetSecrets(nil) // No masking
 	}
 
 	if len(dotenv.Vars) > 0 {
@@ -423,8 +468,8 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 	r.Output(r.styles.JobBox(string(ocw.Name), "", string(ocw.Description)))
 	r.Output("  %s %s\n\n", r.styles.Label("Directory:"), r.styles.Value(r.WorkflowDir))
 
-	// Load .env file if present
-	if err := r.loadDotEnv(); err != nil {
+	// Load .env file if present (passing workflow env as defaults)
+	if err := r.loadDotEnv(ocw.Env); err != nil {
 		return fmt.Errorf("failed to load .env: %w", err)
 	}
 
@@ -507,8 +552,8 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 	r.Output(r.styles.JobBox(displayName, string(ocw.Name), string(job.Description)))
 	r.Output("  %s %s\n\n", r.styles.Label("Directory:"), r.styles.Value(r.WorkflowDir))
 
-	// Load .env file if present
-	if err := r.loadDotEnv(); err != nil {
+	// Load .env file if present (passing workflow env as defaults)
+	if err := r.loadDotEnv(ocw.Env); err != nil {
 		return fmt.Errorf("failed to load .env: %w", err)
 	}
 

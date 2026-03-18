@@ -15,15 +15,28 @@ import (
 )
 
 // prefixWriter wraps a writer and prefixes each line with a styled prefix
+// It also masks any secret values from the output
 type prefixWriter struct {
-	w      io.Writer
-	prefix string
-	buffer bytes.Buffer
+	w       io.Writer
+	prefix  string
+	buffer  bytes.Buffer
+	secrets []string // Secret values to mask
 }
 
 // newPrefixWriter creates a new prefixWriter
-func newPrefixWriter(w io.Writer, prefix string) *prefixWriter {
-	return &prefixWriter{w: w, prefix: prefix}
+func newPrefixWriter(w io.Writer, prefix string, secrets []string) *prefixWriter {
+	return &prefixWriter{w: w, prefix: prefix, secrets: secrets}
+}
+
+// maskSecrets replaces secret values with [secret]
+func (pw *prefixWriter) maskSecrets(line []byte) []byte {
+	result := line
+	for _, secret := range pw.secrets {
+		if secret != "" {
+			result = bytes.ReplaceAll(result, []byte(secret), []byte("[secret]"))
+		}
+	}
+	return result
 }
 
 func (pw *prefixWriter) Write(p []byte) (n int, err error) {
@@ -40,9 +53,10 @@ func (pw *prefixWriter) Write(p []byte) (n int, err error) {
 			pw.buffer.Write(line)
 			break
 		}
-		// Write prefixed line
+		// Mask secrets and write prefixed line
+		maskedLine := pw.maskSecrets(line)
 		fmt.Fprint(pw.w, pw.prefix)
-		pw.w.Write(line)
+		pw.w.Write(maskedLine)
 	}
 
 	return n, nil
@@ -52,7 +66,8 @@ func (pw *prefixWriter) Write(p []byte) (n int, err error) {
 func (pw *prefixWriter) Flush() {
 	if pw.buffer.Len() > 0 {
 		fmt.Fprint(pw.w, pw.prefix)
-		pw.w.Write(pw.buffer.Bytes())
+		masked := pw.maskSecrets(pw.buffer.Bytes())
+		pw.w.Write(masked)
 		fmt.Fprintln(pw.w)
 		pw.buffer.Reset()
 	}
@@ -64,6 +79,8 @@ type Podman struct {
 	Output func(format string, args ...any)
 	// styles provides styled output formatting
 	styles *Styles
+	// secrets contains sensitive values to mask in output
+	secrets []string
 }
 
 // NetworkCreateOptions holds options for creating a network
@@ -151,8 +168,13 @@ func FindAvailablePort(preferredPort int) (int, error) {
 }
 
 // NewPodman creates a new Podman wrapper
-func NewPodman(output func(format string, args ...any), styles *Styles) *Podman {
-	return &Podman{Output: output, styles: styles}
+func NewPodman(output func(format string, args ...any), styles *Styles, secrets []string) *Podman {
+	return &Podman{Output: output, styles: styles, secrets: secrets}
+}
+
+// SetSecrets updates the secrets to mask in output
+func (p *Podman) SetSecrets(secrets []string) {
+	p.secrets = secrets
 }
 
 // PullImage pulls an image if not present locally
@@ -168,8 +190,8 @@ func (p *Podman) PullImage(ctx context.Context, imageName string) error {
 
 	// Create prefixed writers for pull output
 	logPrefix := p.styles.LogPrefix()
-	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix)
-	stderrWriter := newPrefixWriter(os.Stderr, logPrefix)
+	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, p.secrets)
+	stderrWriter := newPrefixWriter(os.Stderr, logPrefix, p.secrets)
 
 	cmd := exec.CommandContext(ctx, "podman", "pull", imageName)
 	cmd.Stdout = stdoutWriter
@@ -298,8 +320,8 @@ func (p *Podman) RunContainer(ctx context.Context, opts RunContainerOptions) err
 
 	// Create prefixed writers for container output
 	logPrefix := p.styles.LogPrefix()
-	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix)
-	stderrWriter := newPrefixWriter(os.Stderr, logPrefix)
+	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, p.secrets)
+	stderrWriter := newPrefixWriter(os.Stderr, logPrefix, p.secrets)
 
 	cmd := exec.CommandContext(ctx, "podman", args...)
 	cmd.Stdout = stdoutWriter
@@ -556,8 +578,8 @@ func (p *Podman) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 
 	// Create prefixed writers for build output
 	logPrefix := p.styles.LogPrefix()
-	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix)
-	stderrWriter := newPrefixWriter(os.Stderr, logPrefix)
+	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, p.secrets)
+	stderrWriter := newPrefixWriter(os.Stderr, logPrefix, p.secrets)
 
 	cmd := exec.CommandContext(ctx, "podman", args...)
 	cmd.Stdout = stdoutWriter
@@ -592,6 +614,17 @@ func (p *Podman) ImageExists(ctx context.Context, imageName string) bool {
 	return cmd.Run() == nil
 }
 
+// maskSecrets replaces all secret values with [secret]
+func (p *Podman) maskSecrets(text string) string {
+	result := text
+	for _, secret := range p.secrets {
+		if secret != "" {
+			result = strings.ReplaceAll(result, secret, "[secret]")
+		}
+	}
+	return result
+}
+
 // StreamLogs streams container logs (for long-running containers)
 func (p *Podman) StreamLogs(ctx context.Context, containerName string) error {
 	cmd := exec.CommandContext(ctx, "podman", "logs", "-f", containerName)
@@ -612,14 +645,14 @@ func (p *Podman) StreamLogs(ctx context.Context, containerName string) error {
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-			fmt.Println(scanner.Text())
+			fmt.Println(p.maskSecrets(scanner.Text()))
 		}
 	}()
 
 	go func() {
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
-			fmt.Fprintln(os.Stderr, scanner.Text())
+			fmt.Fprintln(os.Stderr, p.maskSecrets(scanner.Text()))
 		}
 	}()
 

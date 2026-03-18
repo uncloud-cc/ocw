@@ -386,38 +386,39 @@ By default, the `build` steps also have the `/workflow` folder mounted and have 
 
 ## `env` and `secrets`
 
-Use `env` for configuration and `secrets` for sensitive values. **A `.env` file sets both** - all values are available as `{{ env.NAME }}` and `{{ secrets.NAME }}`.
+Use `env` to define workflow-level environment variables with optional defaults. Some can be **marked as secrets** and will be masked in output.
 
 ```yaml
 # env-secrets.yaml
 name: Environment and Secrets Demo
 
-# Workflow-level env (available to all steps)
 env:
+  # Regular env vars (not masked in output)
   NODE_ENV: development
+  APP_NAME: my-app
+  
+  # Secret env vars (marked with 'secret: true', masked in output)
+  DB_PASSWORD:
+    secret: true
+    default: default-password  # Optional default value
+  
+  API_KEY:
+    secret: true  # No default - must be set in .env
 
 sequence:
-  - name: Show Env and Secrets
+  - name: Show Values
     image: alpine:latest
     cmd: |
-      echo "Env: {{ env.APP_NAME }} v{{ env.APP_VERSION }}"
-      echo "Secret: {{ secrets.API_KEY }}"
-
-  - name: Step-Level Override
-    image: alpine:latest
-    env:
-      NODE_ENV: production  # Overrides workflow-level
-    cmd: echo "NODE_ENV=$NODE_ENV"
+      echo "App: {{ env.APP_NAME }}"  # Regular: shown
+      echo "Secret: {{ secrets.DB_PASSWORD }}"  # Secret: [MASKED] in output
 ```
 
-Create a `.env` file in the workflow directory:
+Create a `.env` file to override defaults:
 
 ```bash
 # .env
-APP_NAME=my-cool-app
-APP_VERSION=1.0.0
-API_KEY=sk-test-12345
-DB_PASSWORD=supersecret
+DB_PASSWORD=supersecret123
+API_KEY=sk-test-abc123
 ```
 
 Run with `ocw env-secrets.yaml`.
@@ -425,56 +426,6 @@ Run with `ocw env-secrets.yaml`.
 **Priority** (highest first): step-level `env` → workflow-level `env` → `.env` file
 
 Use `-e filename.env` to load a different env file.
-  - name: Use in URLs
-    image: alpine:latest
-    env:
-      DATABASE_URL: "postgresql://user:{{ secrets.DB_PASSWORD }}@localhost:5432/mydb"
-    cmd: echo "Connecting to: $DATABASE_URL"
-```
-
-Create the `.env` file:
-
-```bash
-# .env
-APP_NAME=my-cool-app
-APP_VERSION=1.0.0
-API_KEY=sk-test-12345
-DB_PASSWORD=mydbpass123
-```
-
-Run it:
-
-```bash
-ocw env-secrets.yaml
-```
-
-**Output:**
-
-```
-▶ Show Environment Variables [run]
-  │ From env: NODE_ENV=development, BUILD_TARGET=local
-  │ From .env: APP_NAME=my-cool-app
-✓ Show Environment Variables completed
-
-▶ Show Secrets [run]
-  │ API Key: sk-test-12345
-✓ Show Secrets completed
-
-▶ Step-Level Override [run]
-  │ NODE_ENV is now: production
-✓ Step-Level Override completed
-
-▶ Use in URLs [run]
-  │ Connecting to: postgresql://user:mydbpass123@localhost:5432/mydb
-✓ Use in URLs completed
-```
-
-### Key Points
-
-- **`.env` files set both env and secrets** - use whichever makes semantic sense in your templates
-- Use `-e filename.env` flag to load a different env file (e.g., `-e production.env`)
-- Step-level `env` overrides workflow-level `env`
-- Reference in templates anywhere: `cmd`, `image`, `env` values, build args, etc.
 
 ## Exposing containers
 For development environments, you often need to access services from your host machine. The `expose` option makes container ports accessible:

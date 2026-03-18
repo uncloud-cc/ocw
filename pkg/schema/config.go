@@ -8,8 +8,58 @@ type ConfigNamespace = map[string]any
 // Config field providers need to be installed in an OCW using the "extensions" field.
 type Config = map[string]ConfigNamespace
 
+// EnvVar represents an environment variable that can be either a plain string
+// or marked as a secret with an optional default value
+type EnvVar struct {
+	// Value is the default value (for plain strings or secrets with defaults)
+	Value string
+	// IsSecret marks whether this is a secret
+	IsSecret bool
+}
+
+// UnmarshalYAML implements custom unmarshaling for EnvVar
+// It accepts either:
+//   - A plain string: "value"
+//   - A secret object: { secret: true, default: "value" }
+func (e *EnvVar) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Try to unmarshal as a simple string first
+	var plain string
+	if err := unmarshal(&plain); err == nil {
+		e.Value = plain
+		e.IsSecret = false
+		return nil
+	}
+
+	// Try to unmarshal as a secret marker object
+	var secretObj struct {
+		Secret  bool   `yaml:"secret"`
+		Default string `yaml:"default"`
+	}
+	if err := unmarshal(&secretObj); err == nil {
+		e.Value = secretObj.Default
+		e.IsSecret = secretObj.Secret
+		return nil
+	}
+
+	return nil
+}
+
+// MarshalYAML implements custom marshaling for EnvVar
+func (e EnvVar) MarshalYAML() (interface{}, error) {
+	if e.IsSecret {
+		return struct {
+			Secret  bool   `yaml:"secret"`
+			Default string `yaml:"default,omitempty"`
+		}{
+			Secret:  true,
+			Default: e.Value,
+		}, nil
+	}
+	return e.Value, nil
+}
+
 // Env is a map of environment variables
-type Env = map[string]string
+type Env = map[string]EnvVar
 
 // SecureString represents an encrypted secret value
 type SecureString struct {
