@@ -386,7 +386,7 @@ By default, the `build` steps also have the `/workflow` folder mounted and have 
 
 ## `env` and `secrets`
 
-Use `env` to define workflow-level environment variables with optional defaults. Some can be **marked as secrets** and will be masked in output.
+Use `env` to define workflow-level environment variables with optional defaults. Sensitive env vars can be **marked as secrets** and will be masked in output.
 
 ```yaml
 # env-secrets.yaml
@@ -394,23 +394,28 @@ name: Environment and Secrets Demo
 
 env:
   # Regular env vars (not masked in output)
-  NODE_ENV: development
-  APP_NAME: my-app
-  
+  DB_PORT: 8080
+  DB_USER: admin
+
   # Secret env vars (marked with 'secret: true', masked in output)
   DB_PASSWORD:
     secret: true
-    default: default-password  # Optional default value
-  
+    default: givemeaccess  # Optional default value
+
   API_KEY:
     secret: true  # No default - must be set in .env
+
+outputs:
+  dsn: "psql://{{ env.DB_USER }}@{{ env.DB_PASSWORD }}:{{ env.DB_PORT }}/mytable"
 
 sequence:
   - name: Show Values
     image: alpine:latest
     cmd: |
-      echo "App: {{ env.APP_NAME }}"  # Regular: shown
-      echo "Secret: {{ secrets.DB_PASSWORD }}"  # Secret: [MASKED] in output
+      echo "DB port: {{ env.DB_PORT }}"
+      echo "DB user: {{ env.DB_USER }}"
+      echo "DB password: {{ env.DB_PASSWORD }}"
+      echo "API key: {{ secrets.API_KEY }}"
 ```
 
 Create a `.env` file to override defaults:
@@ -421,11 +426,9 @@ DB_PASSWORD=supersecret123
 API_KEY=sk-test-abc123
 ```
 
-Run with `ocw env-secrets.yaml`.
+Now run it again with `ocw env-secrets.yaml`. To see the updated secrets in the output, set the `--show-secrets` flag (`ocw env-secrets.yaml --show-secrets`).
 
-**Priority** (highest first): step-level `env` → workflow-level `env` → `.env` file
-
-Use `-e filename.env` to load a different env file.
+> PS: You can set `-e filename.env` to load a different env file
 
 ## Exposing containers
 For development environments, you often need to access services from your host machine. The `expose` option makes container ports accessible:

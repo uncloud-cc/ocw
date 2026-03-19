@@ -84,6 +84,8 @@ type Runner struct {
 	styles *Styles
 	// secretEnvKeys tracks which env keys are marked as secrets (for masking)
 	secretEnvKeys map[string]bool
+	// secretValues stores the actual secret values for masking
+	secretValues []string
 	// showSecrets disables secret masking when true
 	showSecrets bool
 }
@@ -178,6 +180,9 @@ func (r *Runner) loadDotEnv(workflowEnv schema.Env) error {
 			r.templateCtx.Env[key] = value
 		}
 	}
+
+	// Store secret values for masking in outputs
+	r.secretValues = secretValues
 
 	// Set secrets on podman client for masking (all secret values)
 	// Only mask if showSecrets is false
@@ -347,11 +352,26 @@ func (r *Runner) printOutputs(outputs map[string]string) error {
 			interpolatedOutputs[key] = fmt.Sprintf("<error: %v>", err)
 			continue
 		}
+		// Mask secrets in output values unless showSecrets is enabled
+		if !r.showSecrets {
+			value = r.maskSecretsInString(value)
+		}
 		interpolatedOutputs[key] = value
 	}
 
 	r.Output(r.styles.OutputsBox("Outputs", interpolatedOutputs))
 	return nil
+}
+
+// maskSecretsInString replaces secret values with [secret]
+func (r *Runner) maskSecretsInString(text string) string {
+	result := text
+	for _, secret := range r.secretValues {
+		if secret != "" {
+			result = strings.ReplaceAll(result, secret, "[secret]")
+		}
+	}
+	return result
 }
 
 // cleanupBackgroundContainers stops and removes all background containers
