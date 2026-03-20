@@ -7,17 +7,16 @@ RUN npm install -g nodemon
 # Create app directory
 WORKDIR /app
 
-# Copy package files
+# Copy package files and install dependencies at build time
 COPY package*.json ./
-
-# Install dependencies
 RUN npm install
 
-# Copy app source
-COPY server.js ./
+# Don't copy server.js - it will be mounted from /workflow/nodejs at runtime
+# This enables hot reload to work properly
 
 # Expose port
 EXPOSE 3000
 
 # Use nodemon for development with hot reload
+# Files will be mounted from /workflow/nodejs
 CMD ["npm", "run", "dev"]

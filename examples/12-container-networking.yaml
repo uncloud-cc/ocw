@@ -8,7 +8,7 @@ sequence:
     id: redis
     image: redis:7-alpine
     background: true
-    cmd: redis-server --appendonly yes
+    cmd: redis-server
 
   - name: Start Backend API
     id: api
