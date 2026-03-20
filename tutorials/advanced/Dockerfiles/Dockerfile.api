@@ -1,2 +1,0 @@
-FROM node:25-alpine
-CMD ["npm", "install", "&&", "node", "server.js"]

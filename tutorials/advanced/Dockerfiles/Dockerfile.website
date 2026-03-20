@@ -1,4 +1,0 @@
-FROM nginx
-
-# Copy the website code
-COPY website.html /usr/share/nginx/html/index.html

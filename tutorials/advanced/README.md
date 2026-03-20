@@ -3,8 +3,18 @@ This is the second tutorial where we dive into advanced features of ocw workflow
 
 Make sure you have the [ocw cli](../basics/README.md#setup) and [Podman](https://podman.io/docs/installation) installed to follow along.
 
-**Table of contents**\
-TODO
+**Table of contents**
+
+- [Parallel & Sequence](#parallel--sequence)
+- [Nesting Parallel and Sequence](#nesting-parallel-and-sequence)
+- [Templating](#templating)
+- [Conditionals (switch / case)](#conditionals-switch--case)
+- [Jobs](#jobs)
+- [Step outputs](#step-outputs)
+- [Understanding the `/workflow` mounted folder](#understanding-the-workflow-mounted-folder)
+- [`env` and `secrets`](#env-and-secrets)
+- [Exposing containers](#exposing-containers)
+- [Container networking](#container-networking)
 
 ## Parallel & Sequence
 In ocw, steps either run as a `sequence` or in `parallel`. You can also nest the two to express any workflow that comes to mind.
