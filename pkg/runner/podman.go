@@ -234,6 +234,7 @@ type RunContainerOptions struct {
 	Background   bool               // Run in background (detached)
 	HealthCheck  *HealthCheckConfig // Health check for background containers
 	PortMappings []PortMapping      // Ports to expose from container to host
+	Force        bool               // Force remove existing container with same name
 }
 
 // RunContainer runs a container and waits for it to complete
@@ -251,6 +252,24 @@ func (p *Podman) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	if containerName == "" && opts.Background {
 		containerName = fmt.Sprintf("ocw-%d", time.Now().UnixNano())
 	}
+
+	// Handle existing containers
+	if containerName != "" && p.ContainerExists(ctx, containerName) {
+		if opts.Force {
+			// Force flag: remove existing container regardless of state
+			if err := p.RemoveExistingContainer(ctx, containerName); err != nil {
+				return fmt.Errorf("failed to remove existing container: %w", err)
+			}
+		} else if !p.IsContainerRunning(ctx, containerName) {
+			// Auto-cleanup: remove stopped containers automatically
+			p.Output("  %s\n", p.styles.Dim(fmt.Sprintf("Auto-removing stopped container '%s'...", containerName)))
+			if err := p.RemoveContainer(ctx, containerName); err != nil {
+				return fmt.Errorf("failed to remove stopped container: %w", err)
+			}
+		}
+		// If container is running and force is not set, let podman fail with a clear error
+	}
+
 	if containerName != "" {
 		args = append(args, "--name", containerName)
 	}
@@ -463,6 +482,36 @@ func (p *Podman) StopContainer(ctx context.Context, containerName string) error 
 func (p *Podman) RemoveContainer(ctx context.Context, containerName string) error {
 	cmd := exec.CommandContext(ctx, "podman", "rm", "-f", containerName)
 	return cmd.Run()
+}
+
+// ContainerExists checks if a container with the given name exists (running or stopped)
+func (p *Podman) ContainerExists(ctx context.Context, containerName string) bool {
+	cmd := exec.CommandContext(ctx, "podman", "inspect", "--format", "{{.Id}}", containerName)
+	err := cmd.Run()
+	return err == nil
+}
+
+// RemoveExistingContainer removes an existing container with the given name if it exists
+func (p *Podman) RemoveExistingContainer(ctx context.Context, containerName string) error {
+	if !p.ContainerExists(ctx, containerName) {
+		return nil // Container doesn't exist, nothing to do
+	}
+
+	p.Output("  %s\n", p.styles.Warning(fmt.Sprintf("Removing existing container '%s'...", containerName)))
+
+	// Stop the container if running
+	if p.IsContainerRunning(ctx, containerName) {
+		if err := p.StopContainer(ctx, containerName); err != nil {
+			return fmt.Errorf("failed to stop existing container: %w", err)
+		}
+	}
+
+	// Remove the container
+	if err := p.RemoveContainer(ctx, containerName); err != nil {
+		return fmt.Errorf("failed to remove existing container: %w", err)
+	}
+
+	return nil
 }
 
 // BuildImageOptions holds options for building an image

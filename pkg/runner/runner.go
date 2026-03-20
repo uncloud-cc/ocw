@@ -88,6 +88,8 @@ type Runner struct {
 	secretValues []string
 	// showSecrets disables secret masking when true
 	showSecrets bool
+	// force removes existing containers with the same name
+	force bool
 }
 
 // NewRunner creates a new workflow runner
@@ -124,6 +126,12 @@ func (r *Runner) WithInputsFile(inputsFile string) *Runner {
 // WithShowSecrets sets whether to show secret values in output (disable masking)
 func (r *Runner) WithShowSecrets(show bool) *Runner {
 	r.showSecrets = show
+	return r
+}
+
+// WithForce sets whether to force remove existing containers with the same name
+func (r *Runner) WithForce(force bool) *Runner {
+	r.force = force
 	return r
 }
 
@@ -961,6 +969,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		Background:   step.Background,
 		HealthCheck:  healthCheck,
 		PortMappings: portMappings,
+		Force:        r.force, // Pass force flag
 	}
 
 	if err := r.podman.RunContainer(ctx, opts); err != nil {

@@ -61,6 +61,7 @@ func run() error {
 	showVersion := flag.Bool("version", false, "Show version")
 	help := flag.Bool("help", false, "Show help")
 	showSecrets := flag.Bool("show-secrets", false, "Show secret values in output (unmask secrets)")
+	force := flag.Bool("force", false, "Force remove existing containers with the same name")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "ocw - Open Container Workflow CLI\n\n")
@@ -78,6 +79,7 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "  ocw -i inputs.yaml deploy   Run 'deploy' job with inputs from YAML\n")
 		fmt.Fprintf(os.Stderr, "  ocw -validate -f my.yaml    Validate a workflow file\n")
 		fmt.Fprintf(os.Stderr, "  ocw -show-secrets dev       Run 'dev' job showing secret values\n")
+		fmt.Fprintf(os.Stderr, "  ocw -force dev              Run 'dev' job, replacing existing containers\n")
 	}
 
 	// Reorder args to support flags anywhere in the command line
@@ -191,6 +193,9 @@ func run() error {
 	}
 	if *showSecrets {
 		r.WithShowSecrets(true)
+	}
+	if *force {
+		r.WithForce(true)
 	}
 
 	if jobName != "" {
