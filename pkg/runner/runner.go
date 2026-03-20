@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"github.com/opencontainerworkflow/ocw/pkg/schema"
-
-	"github.com/goccy/go-yaml"
 )
 
 // StepResult represents the result of a step execution
@@ -58,8 +56,6 @@ type Runner struct {
 	WorkflowDir string
 	// EnvFile is the path to the .env file to load (empty means use default .env)
 	EnvFile string
-	// InputsFile is the path to the inputs YAML file to load
-	InputsFile string
 	// Output function for logging (defaults to fmt.Printf)
 	Output func(format string, args ...any)
 	// Podman client for container operations
@@ -117,12 +113,6 @@ func (r *Runner) WithEnvFile(envFile string) *Runner {
 	return r
 }
 
-// WithInputsFile sets a custom inputs YAML file path
-func (r *Runner) WithInputsFile(inputsFile string) *Runner {
-	r.InputsFile = inputsFile
-	return r
-}
-
 // WithShowSecrets sets whether to show secret values in output (disable masking)
 func (r *Runner) WithShowSecrets(show bool) *Runner {
 	r.showSecrets = show
@@ -147,7 +137,6 @@ func (r *Runner) loadDotEnv(workflowEnv schema.Env) error {
 		r.templateCtx.Env[key] = envVar.Value
 		if envVar.IsSecret {
 			r.secretEnvKeys[key] = true
-			r.templateCtx.Secrets[key] = envVar.Value
 			// Collect default secret value for masking (if not empty)
 			if envVar.Value != "" {
 				secretValues = append(secretValues, envVar.Value)
@@ -178,9 +167,8 @@ func (r *Runner) loadDotEnv(workflowEnv schema.Env) error {
 	for key, value := range dotenv.Vars {
 		// Check if this key was marked as a secret in workflow
 		if r.secretEnvKeys[key] {
-			// It's a secret - update both env and secrets context
+			// It's a secret - update env and collect for masking
 			r.templateCtx.Env[key] = value
-			r.templateCtx.Secrets[key] = value
 			// Collect .env secret value for masking
 			secretValues = append(secretValues, value)
 		} else {
@@ -202,30 +190,6 @@ func (r *Runner) loadDotEnv(workflowEnv schema.Env) error {
 
 	if len(dotenv.Vars) > 0 {
 		r.Output("  %s %s\n", r.styles.Dim(fmt.Sprintf("Loaded %d variable(s) from", len(dotenv.Vars))), r.styles.Value(envFileName))
-	}
-
-	return nil
-}
-
-// loadInputs loads inputs from a YAML file and populates the template context
-func (r *Runner) loadInputs() error {
-	if r.InputsFile == "" {
-		// No inputs file specified, nothing to load
-		return nil
-	}
-
-	inputs, err := LoadInputsFile(r.InputsFile)
-	if err != nil {
-		return err
-	}
-
-	// Load inputs into template context
-	for key, value := range inputs {
-		r.templateCtx.Inputs[key] = value
-	}
-
-	if len(inputs) > 0 {
-		r.Output("  %s %s\n", r.styles.Dim(fmt.Sprintf("Loaded %d input(s) from", len(inputs))), r.styles.Value(r.InputsFile))
 	}
 
 	return nil
@@ -501,11 +465,6 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 		return fmt.Errorf("failed to load .env: %w", err)
 	}
 
-	// Load inputs file if specified
-	if err := r.loadInputs(); err != nil {
-		return fmt.Errorf("failed to load inputs: %w", err)
-	}
-
 	// Set up template context with workflow metadata
 	r.templateCtx.Workflow = WorkflowMeta{
 		Name:        string(ocw.Name),
@@ -583,11 +542,6 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 	// Load .env file if present (passing workflow env as defaults)
 	if err := r.loadDotEnv(ocw.Env); err != nil {
 		return fmt.Errorf("failed to load .env: %w", err)
-	}
-
-	// Load inputs file if specified
-	if err := r.loadInputs(); err != nil {
-		return fmt.Errorf("failed to load inputs: %w", err)
 	}
 
 	// Set up template context with workflow and job metadata
@@ -1112,11 +1066,6 @@ func (r *Runner) runWorkflowStep(ctx context.Context, step *schema.WorkflowStep)
 	if step.Workflow.Inherit != nil {
 		r.Output("  %s %s\n", r.styles.Label("Inherit secrets:"), r.styles.Value(string(step.Workflow.Inherit.Secrets)))
 		r.Output("  %s %s\n", r.styles.Label("Inherit env:"), r.styles.Value(string(step.Workflow.Inherit.Env)))
-	}
-
-	if len(step.Workflow.Inputs) > 0 {
-		inputsYaml, _ := yaml.Marshal(step.Workflow.Inputs)
-		r.Output("  %s\n%s", r.styles.Label("Inputs:"), string(inputsYaml))
 	}
 
 	// TODO: Actually load and run the referenced workflow

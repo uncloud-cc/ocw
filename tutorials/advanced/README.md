@@ -125,8 +125,7 @@ Here's everything you can reference in templates:
 | --------------------- | ----------------------------- |
 | `{{ workflow.name }}` | Name of the workflow          |
 | `{{ job.name }}`      | Name of the current job       |
-| `{{ env.VARNAME }}`   | Environment variable          |
-| `{{ secrets.NAME }}`  | Secret value (from .env file) |
+| `{{ env.VARNAME }}`   | Environment variable        |
 | `{{ steps.ID.KEY }}`  | Output from a previous step   |
 
 Templates work in most string fields including:
@@ -182,7 +181,6 @@ The `switch` expression supports any template, so you can base decisions on:
 
 - Environment variables: `{{ env.BRANCH }}`
 - Step outputs: `{{ steps.check.result }}`
-- Inputs: `{{ inputs.environment }}`
 
 Each case can contain a single step or multiple steps in sequence. If the value doesn't match any case, the `default` case runs.
 

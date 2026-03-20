@@ -33,6 +33,7 @@ MIT License - see [LICENSE](LICENSE) file.
   - [Install](#install)
   - [Getting started](#getting-started)
   - [Feedback](#feedback)
+  - [License](#license)
   - [Reference](#reference)
     - [Workflow Structure](#workflow-structure)
     - [Jobs](#jobs)
@@ -46,8 +47,7 @@ MIT License - see [LICENSE](LICENSE) file.
       - [Build Step](#build-step)
       - [Workflow Step](#workflow-step)
     - [Background Containers](#background-containers)
-    - [Inputs](#inputs)
-    - [Environment \& Secrets](#environment--secrets)
+    - [Environment & Secrets](#environment--secrets)
     - [Template Syntax](#template-syntax)
 
 ---
@@ -63,10 +63,6 @@ env:
   NODE_ENV: production
   API_KEY:
     secret: true       # masked in output
-
-inputs:
-  tag:
-    default: latest
 
 # Choose ONE: direct flow OR jobs
 sequence: [...]        # or parallel: [...] or switch: "..."
@@ -149,12 +145,10 @@ parallel:
 Conditional branching based on an expression.
 
 ```yaml
-inputs:
-  environment:
-    type: choice
-    options: [staging, production]
+env:
+  DEPLOY_ENV: staging   # Set via env var or .env file
 
-switch: "{{inputs.environment}}"
+switch: "{{env.DEPLOY_ENV}}"
 case:
   staging:
     - name: Deploy Staging
@@ -238,9 +232,8 @@ Invokes another workflow (local or remote).
 - name: Run Security Scan
   workflow:
     from: github.com/org/workflows/security@v1.0.0 # or ./local/path.yaml
-    inputs:
-      severity: high
     env:
+      SEVERITY: high
       SCAN_TARGET: /workflow
       TOKEN: "{{env.SCAN_TOKEN}}"
 ```
@@ -287,29 +280,6 @@ expose:
 ```
 
 Steps reference background services by their `id` as hostname (e.g., `postgres:5432`).
-
----
-
-### Inputs
-
-Define parameters for your workflow. Pass via `--input key=value`.
-
-```yaml
-inputs:
-  tag:
-    type: string          # string | number | boolean | choice
-    default: latest
-    description: Image tag
-
-  environment:
-    type: choice
-    options: [dev, staging, production]
-    required: true
-```
-
-Use in templates: `{{inputs.tag}}`, `{{inputs.environment}}`
-
-Additional options: `pattern`, `minLength`, `maxLength`, `min`, `max`.
 
 ---
 
@@ -362,7 +332,6 @@ Use `{{...}}` to reference dynamic values:
 
 | Syntax                | Description               |
 | --------------------- | ------------------------- |
-| `{{inputs.name}}`     | Input value               |
 | `{{env.VAR}}`         | Environment variable      |
 | `{{steps.id.output}}` | Output from previous step |
 | `{{workflow.name}}`   | Workflow metadata         |
@@ -371,11 +340,11 @@ Templates work in: `cmd`, `env` values, `image`, build `tags`, and most string f
 
 ```yaml
 - name: Deploy
-  image: myapp:{{inputs.tag}}
+  image: myapp:{{env.TAG}}
   cmd: |
-    echo "Deploying to {{inputs.environment}}"
+    echo "Deploying to {{env.ENVIRONMENT}}"
     curl -H "Authorization: Bearer {{env.API_TOKEN}}" \
       https://api.example.com/deploy
   env:
-    VERSION: "{{inputs.tag}}"
+    VERSION: "{{env.TAG}}"
 ```

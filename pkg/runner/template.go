@@ -13,14 +13,8 @@ type TemplateContext struct {
 	// Each step can have multiple outputs (e.g., "image" for build steps)
 	Steps map[string]map[string]string
 
-	// Secrets contains secret values, keyed by secret name
-	Secrets map[string]string
-
 	// Env contains environment variables (workflow-level + system)
 	Env map[string]string
-
-	// Inputs contains input values, keyed by input name
-	Inputs map[string]string
 
 	// Workflow contains workflow metadata
 	Workflow WorkflowMeta
@@ -46,10 +40,8 @@ type JobMeta struct {
 // NewTemplateContext creates a new empty template context
 func NewTemplateContext() *TemplateContext {
 	return &TemplateContext{
-		Steps:   make(map[string]map[string]string),
-		Secrets: make(map[string]string),
-		Env:     make(map[string]string),
-		Inputs:  make(map[string]string),
+		Steps: make(map[string]map[string]string),
+		Env:   make(map[string]string),
 	}
 }
 
@@ -72,7 +64,7 @@ func (tc *TemplateContext) GetStepOutput(stepID, key string) (string, bool) {
 }
 
 // templatePattern matches {{ ... }} expressions
-// Supports: {{ steps.id.output }}, {{ secrets.NAME }}, {{ env.NAME }}, etc.
+// Supports: {{ steps.id.output }}, {{ env.NAME }}, {{ workflow.name }}, {{ job.name }}
 var templatePattern = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 
 // Interpolate replaces template expressions in a string with their values
@@ -117,33 +109,17 @@ func (tc *TemplateContext) evaluateExpression(expr string) (string, error) {
 		return "", fmt.Errorf("step output not found: steps.%s.%s", stepID, outputKey)
 
 	case "secrets":
-		// {{ secrets.<name> }}
+		// {{ secrets.<name> }} - deprecated, use {{ env.<name> }} instead
 		secretName := parts[1]
-		if value, ok := tc.Secrets[secretName]; ok {
-			return value, nil
-		}
-		// Also check environment variables for secrets
 		if value := os.Getenv(secretName); value != "" {
 			return value, nil
 		}
 		return "", fmt.Errorf("secret not found: %s", secretName)
 
-	case "env":
-		// {{ env.<name> }}
-		envName := parts[1]
-		if value, ok := tc.Env[envName]; ok {
-			return value, nil
-		}
-		// Fall back to system environment
-		if value := os.Getenv(envName); value != "" {
-			return value, nil
-		}
-		return "", fmt.Errorf("environment variable not found: %s", envName)
-
 	case "inputs":
-		// {{ inputs.<name> }}
+		// {{ inputs.<name> }} - deprecated, use {{ env.<name> }} instead
 		inputName := parts[1]
-		if value, ok := tc.Inputs[inputName]; ok {
+		if value := os.Getenv(inputName); value != "" {
 			return value, nil
 		}
 		return "", fmt.Errorf("input not found: %s", inputName)

@@ -57,7 +57,6 @@ func run() error {
 	validateOnly := flag.Bool("validate", false, "Only validate the workflow file, don't run it")
 	workflowFile := flag.String("f", "", "Workflow file to use (default: auto-discover)")
 	envFile := flag.String("e", "", "Environment file to load (default: .env)")
-	inputsFile := flag.String("i", "", "Inputs file to load (YAML format)")
 	showVersion := flag.Bool("version", false, "Show version")
 	help := flag.Bool("help", false, "Show help")
 	showSecrets := flag.Bool("show-secrets", false, "Show secret values in output (unmask secrets)")
@@ -76,7 +75,6 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "  ocw build                   Run the 'build' job\n")
 		fmt.Fprintf(os.Stderr, "  ocw -f workflow.yaml dev    Run 'dev' job from workflow.yaml\n")
 		fmt.Fprintf(os.Stderr, "  ocw -e staging.env dev      Run 'dev' job with staging.env\n")
-		fmt.Fprintf(os.Stderr, "  ocw -i inputs.yaml deploy   Run 'deploy' job with inputs from YAML\n")
 		fmt.Fprintf(os.Stderr, "  ocw -validate -f my.yaml    Validate a workflow file\n")
 		fmt.Fprintf(os.Stderr, "  ocw -show-secrets dev       Run 'dev' job showing secret values\n")
 		fmt.Fprintf(os.Stderr, "  ocw -force dev              Run 'dev' job, replacing existing containers\n")
@@ -187,9 +185,6 @@ func run() error {
 	r := runner.NewRunner(workflowDir)
 	if *envFile != "" {
 		r.WithEnvFile(*envFile)
-	}
-	if *inputsFile != "" {
-		r.WithInputsFile(*inputsFile)
 	}
 	if *showSecrets {
 		r.WithShowSecrets(true)
@@ -345,13 +340,6 @@ func printWorkflowSummary(ocw *schema.OCW) {
 			} else {
 				fmt.Printf("    - %s\n", name)
 			}
-		}
-	}
-
-	if len(ocw.Inputs) > 0 {
-		fmt.Printf("  Inputs: %d\n", len(ocw.Inputs))
-		for name, input := range ocw.Inputs {
-			fmt.Printf("    - %s (%s)\n", name, input.GetType())
 		}
 	}
 

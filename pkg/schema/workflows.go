@@ -26,8 +26,6 @@ type WorkflowConfig struct {
 	Secrets Secrets `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	// Inherit specifies what to inherit from the parent workflow
 	Inherit *InheritConfig `yaml:"inherit,omitempty" json:"inherit,omitempty"`
-	// Inputs are input values to pass to the workflow
-	Inputs map[string]any `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 }
 
 // WorkflowStep represents a step that runs another workflow

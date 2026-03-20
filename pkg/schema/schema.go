@@ -19,8 +19,6 @@ type OCW struct {
 	Description Description `yaml:"description,omitempty" json:"description,omitempty"`
 	// Config is optional workflow-level configuration
 	Config Config `yaml:"config,omitempty" json:"config,omitempty"`
-	// Inputs are optional workflow inputs
-	Inputs Inputs `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 	// Env are optional environment variables
 	Env Env `yaml:"env,omitempty" json:"env,omitempty"`
 	// Secrets are optional secrets

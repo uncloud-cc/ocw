@@ -176,16 +176,3 @@ func (Step) JSONSchema() *jsonschema.Schema {
 		},
 	}
 }
-
-// JSONSchema implements jsonschema.JSONSchemaer for Input (discriminated union)
-// It produces a oneOf schema with all input type variants
-func (Input) JSONSchema() *jsonschema.Schema {
-	return &jsonschema.Schema{
-		OneOf: []*jsonschema.Schema{
-			{Ref: "#/$defs/StringInput"},
-			{Ref: "#/$defs/NumberInput"},
-			{Ref: "#/$defs/BooleanInput"},
-			{Ref: "#/$defs/ChoiceInput"},
-		},
-	}
-}

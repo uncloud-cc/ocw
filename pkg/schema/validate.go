@@ -100,11 +100,6 @@ func (o *OCW) Validate() error {
 		v.validateID("id", o.ID)
 	}
 
-	// Validate inputs
-	if o.Inputs != nil {
-		v.validateInputs(o.Inputs)
-	}
-
 	// Check flow types at top level
 	flowTypes := 0
 	if len(o.Parallel) > 0 {
@@ -214,57 +209,6 @@ func (v *validator) validateJob(job *Job) {
 func (v *validator) validateID(field string, id string) {
 	if !idPattern.MatchString(id) {
 		v.withPath(field).addErrorf("invalid id %q: must start with letter or underscore and contain only letters, numbers, and underscores", id)
-	}
-}
-
-func (v *validator) validateInputs(inputs Inputs) {
-	for name, input := range inputs {
-		iv := v.withPath("inputs").withPath(name)
-		iv.validateInput(&input)
-		v.merge(iv)
-	}
-}
-
-func (v *validator) validateInput(input *Input) {
-	switch {
-	case input.StringInput != nil:
-		// String inputs are valid by default
-		if input.StringInput.MinLength != nil && input.StringInput.MaxLength != nil {
-			if *input.StringInput.MinLength > *input.StringInput.MaxLength {
-				v.addError("minLength cannot be greater than maxLength")
-			}
-		}
-		if input.StringInput.Pattern != "" {
-			if _, err := regexp.Compile(input.StringInput.Pattern); err != nil {
-				v.addErrorf("invalid pattern %q: %v", input.StringInput.Pattern, err)
-			}
-		}
-	case input.NumberInput != nil:
-		if input.NumberInput.Min != nil && input.NumberInput.Max != nil {
-			if *input.NumberInput.Min > *input.NumberInput.Max {
-				v.addError("min cannot be greater than max")
-			}
-		}
-	case input.BooleanInput != nil:
-		// Boolean inputs are always valid
-	case input.ChoiceInput != nil:
-		if len(input.ChoiceInput.Options) == 0 {
-			v.addError("choice input must have at least one option")
-		}
-		if input.ChoiceInput.Default != "" {
-			found := false
-			for _, opt := range input.ChoiceInput.Options {
-				if opt == input.ChoiceInput.Default {
-					found = true
-					break
-				}
-			}
-			if !found {
-				v.addErrorf("default value %q is not in options", input.ChoiceInput.Default)
-			}
-		}
-	default:
-		v.addError("input type not specified")
 	}
 }
 
