@@ -1,0 +1,43 @@
+# 10-jobs.yaml
+# Multiple entry points in a single workflow file
+schemaVersion: "0.1.0"
+name: Development Tasks
+
+jobs:
+  build:
+    name: Build Application
+    sequence:
+      - name: Install Dependencies
+        image: node:20-alpine
+        cmd: echo "Installing npm packages..."
+
+      - name: Build
+        image: node:20-alpine
+        cmd: echo "Building application..."
+
+  test:
+    name: Run Tests
+    parallel:
+      - name: Unit Tests
+        image: node:20-alpine
+        cmd: echo "Running unit tests..."
+
+      - name: Integration Tests
+        image: node:20-alpine
+        cmd: echo "Running integration tests..."
+
+  dev:
+    name: Development Server
+    sequence:
+      - name: Start Dev Server
+        image: node:20-alpine
+        cmd: echo "Server running at http://localhost:3000"
+        background: true
+        expose: 3000
+
+  lint:
+    name: Run Linter
+    sequence:
+      - name: Lint
+        image: node:20-alpine
+        cmd: echo "Linting code..."

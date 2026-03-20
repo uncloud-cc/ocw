@@ -1,0 +1,27 @@
+# 04-parallel-steps.yaml
+# Run independent tasks in parallel to save time
+schemaVersion: "0.1.0"
+name: Parallel Execution Demo
+
+sequence:
+  - name: Setup
+    image: alpine:latest
+    cmd: echo "Starting parallel tasks..."
+
+  - name: Run Checks in Parallel
+    parallel:
+      - name: Lint Code
+        image: node:20-alpine
+        cmd: echo "Running linter... ✓"
+
+      - name: Check Formatting
+        image: node:20-alpine
+        cmd: echo "Checking code format... ✓"
+
+      - name: Type Check
+        image: node:20-alpine
+        cmd: echo "Running type checker... ✓"
+
+  - name: Finalize
+    image: alpine:latest
+    cmd: echo "All checks completed!"

@@ -1,0 +1,10 @@
+name: /workdir example
+sequence:
+  - name: Print current directory & contents
+    image: alpine:latest
+    cmd: |
+      echo "Current folder:"
+      pwd
+      echo "---"
+      echo "Contents:"
+      ls

@@ -1,0 +1,14 @@
+name: Build context
+sequence:
+  - name: Build the container
+    id: build
+    build:
+      image: ocw-tutorials/context
+      dockerfile: context/Dockerfile
+      context: ./context
+
+  - name: Run the container
+    id: run
+    image: "{{ steps.build.image }}"
+    background: true
+    expose: 80

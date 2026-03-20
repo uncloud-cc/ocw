@@ -1,0 +1,21 @@
+# 07-templating.yaml
+# Demonstrates all available template expressions
+schemaVersion: "0.1.0"
+name: Template Demo
+
+sequence:
+  - name: Generate Info
+    id: info
+    image: alpine:latest
+    cmd: |
+      echo "version=1.0.0" >> $OUTPUTS
+      echo "build_time=$(date)" >> $OUTPUTS
+
+  - name: Display Templates
+    image: alpine:latest
+    cmd: |
+      echo "=== Available Templates ==="
+      echo "Workflow name: {{ workflow.name }}"
+      echo "Current user: {{ env.USER }}"
+      echo "Step output version: {{ steps.info.version }}"
+      echo "Step output build_time: {{ steps.info.build_time }}"

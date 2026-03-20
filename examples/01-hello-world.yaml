@@ -1,0 +1,16 @@
+# 01-hello-world.yaml
+# A simple sequential workflow - the OCW equivalent of "Hello World"
+schemaVersion: "0.1.0"
+name: Hello World
+
+sequence:
+  - name: Say Hello
+    image: alpine:latest
+    cmd: echo "Hello from OCW! 🎉"
+
+  - name: Show System Info
+    image: alpine:latest
+    cmd: |
+      echo "Architecture: $(uname -m)"
+      echo "OS: $(uname -s)"
+      echo "Date: $(date)"

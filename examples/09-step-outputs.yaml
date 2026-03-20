@@ -1,0 +1,38 @@
+# 09-step-outputs.yaml
+# Passing data between steps using outputs
+schemaVersion: "0.1.0"
+name: Step Outputs Demo
+
+outputs:
+  version: "{{ steps.version.version }}"
+  image_tag: "{{ steps.build.image }}"
+
+sequence:
+  - name: Get Version
+    id: version
+    image: alpine:latest
+    cmd: |
+      VERSION=$(cat /workflow/package.json | grep '"version"' | cut -d'"' -f4 || echo "1.0.0")
+      echo "version=$VERSION" >> $OUTPUTS
+      echo "Generated version: $VERSION"
+
+  - name: Get Build Time
+    id: buildtime
+    image: alpine:latest
+    cmd: |
+      echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $OUTPUTS
+      echo "Build time recorded"
+
+  - name: Build Container
+    id: build
+    build:
+      image: "myapp:{{ steps.version.version }}"
+      dockerfile: Dockerfile
+
+  - name: Display Results
+    image: alpine:latest
+    cmd: |
+      echo "Build complete!"
+      echo "Version: {{ steps.version.version }}"
+      echo "Image: {{ steps.build.image }}"
+      echo "Built at: {{ steps.buildtime.timestamp }}"

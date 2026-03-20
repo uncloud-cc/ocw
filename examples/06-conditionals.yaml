@@ -1,0 +1,25 @@
+# 06-conditionals.yaml
+# Branch workflow based on environment variables using switch/case
+schemaVersion: "0.1.0"
+name: Environment-Based Deployment
+
+# Usage: DEPLOY_ENV=staging ocw 06-conditionals.yaml
+switch: "{{ env.DEPLOY_ENV }}"
+case:
+  production:
+    - name: Deploy to Production
+      image: alpine:latest
+      cmd: |
+        echo "🚀 Deploying to PRODUCTION"
+        echo "Running smoke tests..."
+        echo "Deployment complete!"
+
+  staging:
+    - name: Deploy to Staging
+      image: alpine:latest
+      cmd: echo "📦 Deploying to STAGING environment"
+
+default:
+  - name: Deploy to Development
+    image: alpine:latest
+    cmd: echo "🔧 Deploying to DEVELOPMENT (default)"

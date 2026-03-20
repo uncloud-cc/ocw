@@ -1,0 +1,84 @@
+# 13-ci-pipeline.yaml
+# Complete CI/CD pipeline with build, test, and deploy stages
+schemaVersion: "0.1.0"
+name: CI/CD Pipeline
+
+env:
+  NODE_ENV: production
+  APP_NAME: my-awesome-app
+  
+  # Secrets - set these in .env or CI/CD platform
+  DEPLOY_TOKEN:
+    secret: true
+  REGISTRY_URL:
+    secret: true
+    default: "registry.example.com"
+
+outputs:
+  version: "{{ steps.version.version }}"
+  image: "{{ steps.build.image }}"
+  build_time: "{{ steps.buildtime.timestamp }}"
+
+sequence:
+  - name: Setup
+    image: alpine:latest
+    cmd: |
+      echo "Setting up CI/CD pipeline..."
+      echo "App: {{ env.APP_NAME }}"
+      echo "Environment: {{ env.NODE_ENV }}"
+
+  - name: Get Version
+    id: version
+    image: alpine:latest
+    cmd: |
+      VERSION="1.0.${RANDOM}"
+      echo "version=$VERSION" >> $OUTPUTS
+      echo "Building version: $VERSION"
+
+  - name: Record Build Time
+    id: buildtime
+    image: alpine:latest
+    cmd: |
+      echo "timestamp=$(date -u)" >> $OUTPUTS
+
+  - name: Lint and Security Scan
+    parallel:
+      - name: Lint
+        image: node:20-alpine
+        cmd: echo "✓ Code linting passed"
+
+      - name: Security Audit
+        image: node:20-alpine
+        cmd: echo "✓ No vulnerabilities found"
+
+  - name: Run Tests
+    parallel:
+      - name: Unit Tests
+        image: node:20-alpine
+        cmd: echo "✓ 156 unit tests passed"
+
+      - name: Integration Tests
+        image: node:20-alpine
+        cmd: echo "✓ 23 integration tests passed"
+
+  - name: Build Application
+    id: build
+    build:
+      image: "{{ env.REGISTRY_URL }}/{{ env.APP_NAME }}:{{ steps.version.version }}"
+      dockerfile: Dockerfile
+      buildArgs:
+        NODE_ENV: "{{ env.NODE_ENV }}"
+        VERSION: "{{ steps.version.version }}"
+
+  - name: Push Image
+    image: alpine:latest
+    cmd: |
+      echo "Pushing image to {{ env.REGISTRY_URL }}..."
+      echo "Using token: {{ secrets.DEPLOY_TOKEN }}"
+      echo "✓ Image pushed successfully"
+
+  - name: Deploy
+    image: alpine:latest
+    cmd: |
+      echo "🚀 Deploying {{ env.APP_NAME }}:{{ steps.version.version }}"
+      echo "Deployed at: $(date)"
