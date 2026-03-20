@@ -25,8 +25,6 @@ Check if it worked by running `ocw --help`
 
 ## Reference
 
-> 🤖 First robot draft - needs human refinement
-
 - [Open Container Workflow (ocw)](#open-container-workflow-ocw)
   - [Install](#install)
   - [Getting started](#getting-started)
@@ -52,27 +50,22 @@ Check if it worked by running `ocw --help`
 
 ### Workflow Structure
 
-Every workflow requires `schemaVersion` and `name`. Use either direct flow control (`sequence`/`parallel`/`switch`) or `jobs` for multiple entry points.
+Every workflow needs a `name`. Use either direct flow control (`sequence`/`parallel`/`switch`) or `jobs` for multiple entry points.
 
 ```yaml
-schemaVersion: "0.1.0"
 name: My Workflow
-description: Optional description # optional
 
-env: # workflow-level environment variables
+env:
   NODE_ENV: production
-
-secrets: # encrypted secrets
   API_KEY:
-    secure: v1:encrypted...
+    secret: true       # masked in output
 
-inputs: # parameterize your workflow
+inputs:
   tag:
-    type: string
     default: latest
 
 # Choose ONE: direct flow OR jobs
-sequence: [...] # or parallel: [...] or switch: "..."
+sequence: [...]        # or parallel: [...] or switch: "..."
 # OR
 jobs:
   build: ...
@@ -205,82 +198,33 @@ sequence:
 Runs a container. The workflow directory is mounted at `/workflow`.
 
 ```yaml
-- name: Run Tests # required
-  id: tests # optional, for referencing
-  description: Run unit tests
-  image: node:20-alpine # required
-
-  # Command
-  cmd: npm test # shell command
-  args: ["--coverage"] # command arguments
-  entrypoint: /bin/sh # override entrypoint
-  workdir: /workflow/app # working directory
-
-  # Environment
+- name: Run Tests
+  id: tests              # optional, for referencing outputs
+  image: node:20-alpine
+  cmd: npm test
+  workdir: /workflow/app # default: /workflow
   env:
     NODE_ENV: test
-  envFile: .env.test # or array: [.env, .env.local]
-
-  # Resources
-  memory: "2g"
-  cpus: 2
-  gpus: all # or number
-
-  # Image handling
-  pull: always # always | missing | never
-  platform: linux/amd64
-
-  # Output
-  quiet: true # suppress pull output
-  tty: true # allocate TTY (colored output)
 ```
+
+Additional options: `args`, `entrypoint`, `envFile`, `memory`, `cpus`, `gpus`, `pull`, `platform`, `quiet`, `tty`.
 
 #### Build Step
 
-Builds a container image using Buildah/Podman.
+Builds a container image using Podman/Buildah.
 
 ```yaml
 - name: Build Image
   build:
-    image: myapp:latest # required
-    context: /workflow # build context (default: /workflow)
-    dockerfile: Dockerfile # path to Dockerfile
-    target: production # multi-stage target
-
-    # Tags
-    tags:
-      - myapp:v1.0
-      - myapp:latest
-
-    # Build args
+    image: myapp:latest
+    dockerfile: Dockerfile    # default: Dockerfile
+    context: /workflow        # default: /workflow
+    target: production        # multi-stage target
     buildArgs:
       NODE_ENV: production
-
-    # Multi-platform
-    platform:
-      - linux/amd64
-      - linux/arm64
-
-    # Caching
-    cacheFrom: [myapp:cache]
-    cacheTo: [type=registry, ref=myapp:cache]
-    noCache: false
-
-    # Push/Load
-    push: true # push to registry
-    load: true # load into local images
-
-    # Secrets (available as /run/secrets/<id> in Dockerfile)
-    secrets:
-      npm_token: "{{secrets.NPM_TOKEN}}"
-
-    # Attestations
-    provenance: true
-    sbom: true
-
-    # Progress
-    progress: plain # auto | quiet | plain | tty
 ```
+
+Additional options: `tags`, `platform`, `cacheFrom`, `cacheTo`, `noCache`, `push`, `load`, `secrets`, `provenance`, `sbom`, `progress`.
 
 #### Workflow Step
 
@@ -294,11 +238,7 @@ Invokes another workflow (local or remote).
       severity: high
     env:
       SCAN_TARGET: /workflow
-    secrets:
-      TOKEN: "{{secrets.SCAN_TOKEN}}"
-    inherit:
-      secrets: all # all | none
-      env: none
+      TOKEN: "{{env.SCAN_TOKEN}}"
 ```
 
 ---
@@ -348,46 +288,24 @@ Steps reference background services by their `id` as hostname (e.g., `postgres:5
 
 ### Inputs
 
-Define parameters for your workflow. Pass via `-i file.yaml` or `--input key=value`.
+Define parameters for your workflow. Pass via `--input key=value`.
 
 ```yaml
 inputs:
-  # String input
   tag:
-    type: string # default type if omitted
-    description: Image tag
+    type: string          # string | number | boolean | choice
     default: latest
-    required: false
-    pattern: "^v[0-9]+" # regex validation
-    minLength: 1
-    maxLength: 50
+    description: Image tag
 
-  # Number input
-  replicas:
-    type: number
-    description: Number of replicas
-    default: 3
-    min: 1
-    max: 10
-
-  # Boolean input
-  dryRun:
-    type: boolean
-    description: Perform dry run
-    default: false
-
-  # Choice input
   environment:
     type: choice
-    description: Deploy target
-    options:
-      - development
-      - staging
-      - production
+    options: [dev, staging, production]
     required: true
 ```
 
-Use in templates: `{{inputs.tag}}`, `{{inputs.replicas}}`
+Use in templates: `{{inputs.tag}}`, `{{inputs.environment}}`
+
+Additional options: `pattern`, `minLength`, `maxLength`, `min`, `max`.
 
 ---
 
@@ -409,24 +327,28 @@ jobs:
           NODE_ENV: test # overrides workflow-level
 ```
 
-**Secrets** are encrypted values. Reference with `{{secrets.NAME}}`.
+**Secrets** are env vars marked with `secret: true`. They're masked as `[secret]` in output.
 
 ```yaml
-secrets:
-  # Encrypted (recommended)
-  API_KEY:
-    secure: v1:YijggfkQPZi...:WxCkaqkNDjqJ2A5t...
+env:
+  APP_NAME: my-app              # Regular env var
 
-  # Plain (auto-encrypted by platforms)
-  DB_PASS: mypassword
+  DB_PASSWORD:
+    secret: true                # Masked in output
+    default: changeme           # Optional default
+
+  API_KEY:
+    secret: true                # No default - must be in .env file
 
 sequence:
   - name: Deploy
     image: kubectl
     cmd: kubectl apply -f -
     env:
-      API_KEY: "{{secrets.API_KEY}}"
+      API_KEY: "{{env.API_KEY}}"
 ```
+
+Use `--show-secrets` to reveal actual values in output. Load env files with `-e filename.env`.
 
 ---
 
@@ -434,12 +356,12 @@ sequence:
 
 Use `{{...}}` to reference dynamic values:
 
-| Syntax               | Description               |
-| -------------------- | ------------------------- |
-| `{{inputs.name}}`    | Input value               |
-| `{{secrets.NAME}}`   | Secret value              |
-| `{{env.VAR}}`        | Environment variable      |
-| `{{step_id.output}}` | Output from previous step |
+| Syntax                | Description               |
+| --------------------- | ------------------------- |
+| `{{inputs.name}}`     | Input value               |
+| `{{env.VAR}}`         | Environment variable      |
+| `{{steps.id.output}}` | Output from previous step |
+| `{{workflow.name}}`   | Workflow metadata         |
 
 Templates work in: `cmd`, `env` values, `image`, build `tags`, and most string fields.
 
@@ -448,7 +370,7 @@ Templates work in: `cmd`, `env` values, `image`, build `tags`, and most string f
   image: myapp:{{inputs.tag}}
   cmd: |
     echo "Deploying to {{inputs.environment}}"
-    curl -H "Authorization: Bearer {{secrets.TOKEN}}" \
+    curl -H "Authorization: Bearer {{env.API_TOKEN}}" \
       https://api.example.com/deploy
   env:
     VERSION: "{{inputs.tag}}"
