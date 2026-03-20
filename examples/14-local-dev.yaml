@@ -1,0 +1,309 @@
+# 14-local-dev.yaml
+# Fully fleshed out development environment with hot reload, services, and secrets
+schemaVersion: "0.1.0"
+name: Local Development Environment
+
+env:
+  # Application configuration
+  APP_PORT: 3000
+  APP_VERSION: 1.0.0
+  NODE_ENV: development
+  
+  # Database configuration (non-sensitive defaults)
+  DB_HOST: db
+  DB_PORT: 5432
+  DB_NAME: devdb
+  
+  # Redis configuration
+  REDIS_HOST: cache
+  REDIS_PORT: 6379
+  
+  # Secrets - these should be set in .env file
+  # Example values shown here for documentation
+  DB_USER:
+    secret: true
+    default: dev
+  
+  DB_PASSWORD:
+    secret: true
+    default: devpass
+  
+  API_KEY:
+    secret: true
+    default: dev-api-key-change-in-production
+
+jobs:
+  dev:
+    name: Start Full Development Environment
+    description: Starts PostgreSQL, Redis, and the Node.js dev server with hot reload
+    sequence:
+      - name: Validate Secrets
+        image: alpine:latest
+        cmd: |
+          echo "🔐 Validating environment configuration..."
+          if [ "{{ secrets.DB_PASSWORD }}" = "devpass" ]; then
+            echo "⚠️  WARNING: Using default database password!"
+            echo "   Set DB_PASSWORD in your .env file for security"
+          fi
+          if [ "{{ secrets.API_KEY }}" = "dev-api-key-change-in-production" ]; then
+            echo "⚠️  WARNING: Using default API key!"
+            echo "   Set API_KEY in your .env file for security"
+          fi
+          echo "✅ Configuration validated"
+          echo ""
+
+      - name: Start PostgreSQL Database
+        id: db
+        image: postgres:15-alpine
+        background: true
+        env:
+          POSTGRES_DB: "{{ env.DB_NAME }}"
+          POSTGRES_USER: "{{ secrets.DB_USER }}"
+          POSTGRES_PASSWORD: "{{ secrets.DB_PASSWORD }}"
+        cmd: |
+          echo "🗄️  Starting PostgreSQL..."
+          postgres -c 'log_statement=all'
+        healthCheck:
+          cmd: "pg_isready -U {{ secrets.DB_USER }} -d {{ env.DB_NAME }}"
+          interval: 2s
+          timeout: 5s
+          retries: 10
+          startPeriod: 3s
+        # Database available at hostname: db, port: 5432
+
+      - name: Start Redis Cache
+        id: cache
+        image: redis:7-alpine
+        background: true
+        cmd: |
+          echo "⚡ Starting Redis..."
+          redis-server --appendonly yes
+        healthCheck:
+          cmd: "redis-cli ping"
+          interval: 2s
+          timeout: 5s
+          retries: 10
+          startPeriod: 2s
+
+      - name: Services Ready
+        image: alpine:latest
+        cmd: |
+          echo "✅ All services are healthy and ready!"
+          echo ""
+          echo "Database: postgresql://{{ secrets.DB_USER }}:[secret]@db:5432/{{ env.DB_NAME }}"
+
+      - name: Build and Start Dev Server
+        id: app
+        build:
+          image: ocw-dev-app:latest
+          dockerfile: nodejs/Dockerfile
+          context: ./nodejs
+        background: true
+        expose: "{{ env.APP_PORT }}"
+        env:
+          APP_PORT: "{{ env.APP_PORT }}"
+          APP_VERSION: "{{ env.APP_VERSION }}"
+          NODE_ENV: "{{ env.NODE_ENV }}"
+          DB_HOST: "{{ env.DB_HOST }}"
+          DB_PORT: "{{ env.DB_PORT }}"
+          DB_NAME: "{{ env.DB_NAME }}"
+          DB_USER: "{{ secrets.DB_USER }}"
+          DB_PASSWORD: "{{ secrets.DB_PASSWORD }}"
+          REDIS_HOST: "{{ env.REDIS_HOST }}"
+          REDIS_PORT: "{{ env.REDIS_PORT }}"
+          API_KEY: "{{ secrets.API_KEY }}"
+        workdir: /workflow/nodejs
+        cmd: |
+          # Ensure dependencies are installed
+          npm install
+          # Start with nodemon for hot reload
+          npm run dev
+
+      - name: Show Status
+        image: alpine:latest
+        cmd: |
+          echo ""
+          echo "═══════════════════════════════════════════════════════════"
+          echo "  🎉 Development Environment Ready!"
+          echo "═══════════════════════════════════════════════════════════"
+          echo ""
+          echo "🌐 Application: http://localhost:{{ env.APP_PORT }}"
+          echo "   Health Check: http://localhost:{{ env.APP_PORT }}/health"
+          echo ""
+          echo "🗄️  PostgreSQL:"
+          echo "   Host: db:5432"
+          echo "   Database: {{ env.DB_NAME }}"
+          echo "   User: {{ secrets.DB_USER }}"
+          echo ""
+          echo "⚡ Redis Cache: cache:6379"
+          echo ""
+          echo "📦 Container IDs:"
+          echo "   Database: {{ steps.db.id }}"
+          echo "   Cache: {{ steps.cache.id }}"
+          echo "   App: {{ steps.app.id }}"
+          echo ""
+          echo "🔧 Useful Commands:"
+          echo "   ocw logs dev     - View app logs"
+          echo "   ocw dbshell      - Connect to database"
+          echo "   ocw stop         - Stop all services"
+          echo ""
+          echo "✨ Features:"
+          echo "   • Hot reload enabled (nodemon)"
+          echo "   • API key authentication"
+          echo "   • Database connection pooling"
+          echo "   • Redis caching layer"
+          echo ""
+          echo "Press Ctrl+C to stop all services"
+          echo ""
+          
+          # Keep container running so user can see the message
+          sleep 2
+
+  logs:
+    name: Show Application Logs
+    description: Stream logs from the running application container
+    sequence:
+      - name: Get Container Logs
+        image: alpine:latest
+        cmd: |
+          echo "📋 Application Logs"
+          echo "═══════════════════════════════════════════════════════════"
+          echo ""
+          
+          # Find the app container by name pattern
+          CONTAINER_ID=$(podman ps --filter "name=app" --filter "ancestor=ocw-dev-app" --format "{{.ID}}" | head -1)
+          
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "❌ No running application container found"
+            echo ""
+            echo "Make sure the dev environment is running:"
+            echo "   ocw dev"
+            echo ""
+            echo "Or check all containers:"
+            echo "   podman ps"
+          else
+            echo "📝 Streaming logs from container: $CONTAINER_ID"
+            echo "(Press Ctrl+C to exit)"
+            echo ""
+            podman logs -f "$CONTAINER_ID"
+          fi
+
+  dbshell:
+    name: Open Database Shell
+    description: Connect to PostgreSQL with psql
+    sequence:
+      - name: Connect to PostgreSQL
+        image: postgres:15-alpine
+        cmd: |
+          echo "🗄️  Connecting to PostgreSQL..."
+          echo "   Database: {{ env.DB_NAME }}"
+          echo "   Host: {{ env.DB_HOST }}"
+          echo "   User: {{ secrets.DB_USER }}"
+          echo ""
+          
+          psql postgresql://{{ secrets.DB_USER }}:{{ secrets.DB_PASSWORD }}@{{ env.DB_HOST }}:{{ env.DB_PORT }}/{{ env.DB_NAME }}
+
+  dbmigrate:
+    name: Run Database Migrations
+    description: Execute SQL migrations on the database
+    sequence:
+      - name: Run Migrations
+        image: postgres:15-alpine
+        cmd: |
+          echo "🔄 Running database migrations..."
+          
+          # Example migration - create a table
+          PGPASSWORD="{{ secrets.DB_PASSWORD }}" psql \
+            -h {{ env.DB_HOST }} \
+            -U {{ secrets.DB_USER }} \
+            -d {{ env.DB_NAME }} \
+            -c "
+              CREATE TABLE IF NOT EXISTS migrations (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                applied_at TIMESTAMP DEFAULT NOW()
+              );
+              
+              INSERT INTO migrations (name) VALUES ('initial_schema')
+              ON CONFLICT DO NOTHING;
+              
+              SELECT * FROM migrations;
+            "
+          
+          echo "✅ Migrations completed"
+
+  rediscli:
+    name: Redis CLI
+    description: Open Redis command-line interface
+    sequence:
+      - name: Connect to Redis
+        image: redis:7-alpine
+        cmd: |
+          echo "⚡ Connecting to Redis..."
+          echo "   Host: {{ env.REDIS_HOST }}"
+          echo "   Port: {{ env.REDIS_PORT }}"
+          echo ""
+          echo "Type 'help' for available commands"
+          echo ""
+          
+          redis-cli -h {{ env.REDIS_HOST }} -p {{ env.REDIS_PORT }}
+
+  test:
+    name: Run Tests
+    description: Execute test suite against running services
+    parallel:
+      - name: API Health Check
+        image: alpine:latest
+        cmd: |
+          echo "🏥 Checking API health..."
+          sleep 2
+          if wget -qO- http://app:{{ env.APP_PORT }}/health > /dev/null 2>&1; then
+            echo "✅ API is healthy"
+          else
+            echo "❌ API health check failed"
+            exit 1
+          fi
+
+      - name: Database Connection
+        image: postgres:15-alpine
+        cmd: |
+          echo "🗄️  Checking database connection..."
+          sleep 2
+          if PGPASSWORD="{{ secrets.DB_PASSWORD }}" psql -h {{ env.DB_HOST }} -U {{ secrets.DB_USER }} -d {{ env.DB_NAME }} -c "SELECT 1" > /dev/null 2>&1; then
+            echo "✅ Database connection successful"
+          else
+            echo "❌ Database connection failed"
+            exit 1
+          fi
+
+      - name: Redis Connection
+        image: redis:7-alpine
+        cmd: |
+          echo "⚡ Checking Redis connection..."
+          sleep 2
+          if redis-cli -h {{ env.REDIS_HOST }} -p {{ env.REDIS_PORT }} ping > /dev/null 2>&1; then
+            echo "✅ Redis connection successful"
+          else
+            echo "❌ Redis connection failed"
+            exit 1
+          fi
+
+  stop:
+    name: Stop All Services
+    description: Stop and remove all development containers
+    sequence:
+      - name: Stop Services
+        image: alpine:latest
+        cmd: |
+          echo "🛑 Stopping development environment..."
+          echo ""
+          
+          # Stop all containers started by this workflow
+          echo "Stopping containers..."
+          podman stop -t 10 $(podman ps -q --filter "name=app\|db\|cache" 2>/dev/null) 2>/dev/null || true
+          
+          echo "Removing containers..."
+          podman rm $(podman ps -aq --filter "name=app\|db\|cache" 2>/dev/null) 2>/dev/null || true
+          
+          echo ""
+          echo "✅ Development environment stopped"

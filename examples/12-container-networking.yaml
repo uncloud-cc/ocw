@@ -1,0 +1,33 @@
+# 12-container-networking.yaml
+# Background containers communicating via networking
+schemaVersion: "0.1.0"
+name: Container Networking Demo
+
+sequence:
+  - name: Start Database
+    id: redis
+    image: redis:7-alpine
+    background: true
+    cmd: redis-server --appendonly yes
+
+  - name: Start Backend API
+    id: api
+    image: alpine:latest
+    background: true
+    cmd: |
+      echo "API server starting..."
+      echo "Connected to Redis at: redis"
+      # In a real app, you'd connect to redis:6379
+      sleep 3600
+
+  - name: Test Connectivity
+    image: redis:7-alpine
+    cmd: |
+      echo "Testing connection to Redis..."
+      redis-cli -h redis ping
+      redis-cli -h redis SET hello "world"
+      redis-cli -h redis GET hello
+      echo ""
+      echo "Containers can reach each other by their 'id' hostname:"
+      echo "  - redis: redis"
+      echo "  - api: api"

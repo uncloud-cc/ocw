@@ -1,0 +1,31 @@
+# 05-nested-flow.yaml
+# Complex workflow with nested parallel and sequence steps
+schemaVersion: "0.1.0"
+name: CI Pipeline
+
+sequence:
+  - name: Checkout and Setup
+    image: alpine:latest
+    cmd: echo "Setting up workspace..."
+
+  - name: Run Tests
+    parallel:
+      - name: Unit Tests
+        image: node:20-alpine
+        cmd: echo "Running unit tests... 42 tests passed"
+
+      - name: Integration Tests
+        image: node:20-alpine
+        cmd: echo "Running integration tests... 12 tests passed"
+
+      - name: E2E Tests
+        image: node:20-alpine
+        cmd: echo "Running E2E tests... 8 tests passed"
+
+  - name: Build Application
+    image: node:20-alpine
+    cmd: echo "Building production bundle..."
+
+  - name: Deploy
+    image: alpine:latest
+    cmd: echo "Deploying to production..."

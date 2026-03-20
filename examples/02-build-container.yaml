@@ -1,0 +1,10 @@
+# 02-build-container.yaml
+# Demonstrates building a container image from a Dockerfile
+schemaVersion: "0.1.0"
+name: Build Container
+
+sequence:
+  - name: Build My App
+    build:
+      image: myapp:latest
+      dockerfile: Dockerfile

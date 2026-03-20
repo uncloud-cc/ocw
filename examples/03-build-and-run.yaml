@@ -1,0 +1,15 @@
+# 03-build-and-run.yaml
+# Builds a container, then runs it - demonstrating step references
+schemaVersion: "0.1.0"
+name: Build and Run
+
+sequence:
+  - name: Build Container
+    id: build
+    build:
+      image: hello-app:latest
+      dockerfile: Dockerfile
+
+  - name: Run Container
+    image: "{{ steps.build.image }}"
+    cmd: echo "Built and running: {{ steps.build.image }}"
