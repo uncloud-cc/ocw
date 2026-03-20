@@ -23,6 +23,10 @@ Check if it worked by running `ocw --help`
 
 [Join the community](https://github.com/opencontainerworkflow/ocw/discussions) to ask questions, get help and share feedback.
 
+## License
+
+MIT License - see [LICENSE](LICENSE) file.
+
 ## Reference
 
 - [Open Container Workflow (ocw)](#open-container-workflow-ocw)
