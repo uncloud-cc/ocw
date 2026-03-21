@@ -2,6 +2,21 @@
 
 Container-native workflows for local development & CI/CD.
 
+## Example
+```yaml
+# hello.yaml
+name: Hello World
+env:
+  NAME: world
+sequence:
+  - name: Say Hello
+    image: alpine:latest
+    cmd: echo "Hello {{ env.NAME }} 🎉"
+
+# Run the workflow:
+# NAME=Ada ocw hello.yaml
+```
+
 ## Install
 
 Make sure you have these two installed:
