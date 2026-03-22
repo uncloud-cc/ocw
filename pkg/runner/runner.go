@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/opencontainerworkflow/ocw/pkg/schema"
 )
 
@@ -86,6 +87,8 @@ type Runner struct {
 	showSecrets bool
 	// force removes existing containers with the same name
 	force bool
+	// runID is a unique identifier for this workflow execution (enables parallel runs)
+	runID string
 }
 
 // NewRunner creates a new workflow runner
@@ -452,6 +455,9 @@ func (r *Runner) parseStepOutputs(stepID string) error {
 
 // Run executes an OCW workflow (direct flow control, not a specific job)
 func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
+	// Generate unique run ID for this workflow execution (enables parallel runs)
+	r.runID = gonanoid.Must(5)
+
 	// Ensure background containers and outputs are cleaned up when done
 	defer r.cleanupBackgroundContainers()
 	defer r.cleanupOutputsDir()
@@ -521,6 +527,9 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 
 // RunJob executes a specific job from an OCW workflow
 func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) error {
+	// Generate unique run ID for this workflow execution (enables parallel runs)
+	r.runID = gonanoid.Must(5)
+
 	// Ensure background containers and outputs are cleaned up when done
 	defer r.cleanupBackgroundContainers()
 	defer r.cleanupOutputsDir()
@@ -823,13 +832,13 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	if step.Background {
 		if step.ID != "" {
 			// ID provided - use it as hostname for DNS resolution
-			containerName = fmt.Sprintf("ocw-%s", step.ID)
+			containerName = fmt.Sprintf("ocw-%s-%s", r.runID, step.ID)
 			hostname = string(step.ID)
 			r.Output("  %s %s\n", r.styles.Label("Hostname:"), r.styles.Value(hostname))
 		} else if name != "" && name != "run" {
 			// No ID, but has a name - validate it as a valid hostname
 			if isValidHostname(name) {
-				containerName = fmt.Sprintf("ocw-%s", sanitizeName(name))
+				containerName = fmt.Sprintf("ocw-%s-%s", r.runID, sanitizeName(name))
 				hostname = name
 				r.Output("  %s %s\n", r.styles.Label("Hostname:"), r.styles.Value(hostname))
 			} else {
@@ -839,7 +848,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 			}
 		} else {
 			// No ID and no valid name - generate unique name but warn about networking
-			containerName = fmt.Sprintf("ocw-%d", time.Now().UnixNano())
+			containerName = fmt.Sprintf("ocw-%s-%d", r.runID, time.Now().UnixNano())
 			r.Output("  %s\n", r.styles.Warning("Warning: background container has no 'id' - other containers cannot reach it by hostname"))
 		}
 	}

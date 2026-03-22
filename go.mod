@@ -7,8 +7,10 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/google/go-cmp v0.7.0
 	github.com/invopop/jsonschema v0.13.0
+	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/muesli/termenv v0.16.0
 	github.com/wk8/go-ordered-map/v2 v2.1.8
+	golang.org/x/term v0.40.0
 )
 
 require (
@@ -26,6 +28,5 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sys v0.41.0 // indirect
-	golang.org/x/term v0.40.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
