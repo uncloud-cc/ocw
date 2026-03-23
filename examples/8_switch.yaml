@@ -1,9 +1,9 @@
-# switch.yaml
+# 8_switch.yaml
 name: Environment Deploy
 
 # Run with different DEPLOY_ENV values:
-#   DEPLOY_ENV=staging ocw switch.yaml     → uses staging case
-#   DEPLOY_ENV=production ocw switch.yaml  → uses production case
+#   DEPLOY_ENV=staging ocw 8_switch.yaml     → uses staging case
+#   DEPLOY_ENV=production ocw 8_switch.yaml  → uses production case
 
 switch: "{{ env.DEPLOY_ENV }}"
 case:

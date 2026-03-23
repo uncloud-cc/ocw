@@ -8,20 +8,26 @@ ocw is also designed for security with _immutable workspaces_, _outgoing network
 
 > **At the moment ocw is still in early stages** and many of the security features aren't implemented yet! Checkout the [ocw roadmap](https://github.com/orgs/opencontainerworkflow/projects/1) for details.
 
+> 📚 **Want to follow along?** All example files from this tutorial are available in the [`examples/`](../examples/) directory with numbered prefixes (1_, 2_, etc.) to help you progress gradually. Clone the repo to get started:
+> ```bash
+> git clone https://github.com/uncloud-cc/ocw.git
+> cd ocw/examples
+> ```
+
 ## Setup
 
 Before we jump in, you need to install three things on your local machine to get started:
 
 - [Podman](https://podman.io/docs/installation) it's an open-source container runtime that's secure by design
 - [Go](https://go.dev/dl/) for being able to run the `ocw cli`
-- [ocw cli](../../README.md#install) for running ocw workflows → Just run `go install github.com/uncloud-cc/ocw/cmd`
+- [ocw cli](../README.md#install) for running ocw workflows → Just run `go install github.com/uncloud-cc/ocw/cmd`
 
 ## Hello World!
 
 **Now let's get to the good stuff!** Go ahead and create your first ocw workflow file - they're simple YAML files:
 
 ```yaml
-# hello-world.yaml
+# 1_hello_world.yaml
 name: Hello World!
 sequence:
   - name: hello
@@ -29,7 +35,7 @@ sequence:
     cmd: echo "Hello OCW World! 🎉"
 ```
 
-Go ahead and run it: `ocw hello-world.yaml` - you should see something like this 👇🏻
+Go ahead and run it: `ocw 1_hello_world.yaml` - you should see something like this 👇🏻
 
 ```bash
 ────────────────────────────────────────────────────────────
@@ -82,7 +88,7 @@ CMD ["sh", "-c", "echo Hello $NAME ✨"]
 Now go ahead and create your second ocw workflow - this will build our container:
 
 ```yaml
-# build.yaml
+# 2_build.yaml
 name: Building a container
 sequence:
   - name: Build the container
@@ -91,7 +97,7 @@ sequence:
       dockerfile: Dockerfile
 ```
 
-Run the workflow: `ocw build.yaml` - look for this line confirming it all worked:
+Run the workflow: `ocw 2_build.yaml` - look for this line confirming it all worked:
 
 ```bash
 Successfully tagged localhost/my-first-ocw-container:latest
@@ -111,7 +117,7 @@ As a last step, let's see the the two steps together in action - building & runn
 We'll reuse the Dockerfile from the previous step, but this time we're running it inside of our workflow:
 
 ```yaml
-# build-and-run.yaml
+# 3_build_and_run.yaml
 name: Build & run containers
 sequence:
   - name: Build the container
@@ -126,7 +132,7 @@ sequence:
       NAME: ocw 🤖
 ```
 
-Go ahead and run it 👉🏻 `ocw build-and-run.yaml`.
+Go ahead and run it 👉🏻 `ocw 3_build_and_run.yaml`.
 
 Couple of new things to notice here: We added an `id` to the build-step, allowing us to reference it in the next step using `{{ steps.build.image }}` (more on templating in the advanced tutorial).
 
@@ -134,7 +140,7 @@ Notice how we're also setting an environment variable for this container using `
 
 ## What's Next?
 
-Good job, working through the basics. Next, go to the [advanced tutorial](../advanced/README.md) to learn about:
+Good job, working through the basics. Next, go to the [advanced tutorial](./advanced.md) to learn about:
 
 - Templating
 - Parallel steps

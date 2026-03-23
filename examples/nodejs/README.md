@@ -1,40 +1,71 @@
-# Node.js Development Application
+# Express TypeScript Server
 
-This is a fully functional Express.js application for the OCW local development example.
+A complete Express.js TypeScript server with Docker support and watch mode for development.
 
-## Features
+## Project Structure
 
-- **Express.js** web framework
-- **Hot reload** with nodemon
-- **PostgreSQL** database connectivity
-- **Redis** caching layer
-- **API key authentication** for protected endpoints
-- **Health check** endpoint
-- **Graceful shutdown** handling
+```
+nodejs/
+├── src/
+│   └── index.ts          # TypeScript source code
+├── dist/                 # Compiled JavaScript (generated)
+├── Dockerfile            # Multi-stage build for production
+├── package.json          # Dependencies and scripts
+├── tsconfig.json         # TypeScript configuration
+└── pnpm-lock.yaml        # Locked dependencies
+```
 
-## Files
+## Development
 
-- `server.js` - Main application server
-- `package.json` - Node.js dependencies
-- `Dockerfile` - Container definition with nodemon for hot reload
+### Install Dependencies
+
+```bash
+cd nodejs
+pnpm install
+```
+
+### Run TypeScript Compiler
+
+```bash
+pnpm build
+```
+
+### Start the Server
+
+```bash
+pnpm start
+```
+
+### Watch Mode (in OCW)
+
+The server can be run with automatic rebuild and reload when source files change:
+
+```bash
+cd ..
+ocw watch.yaml
+```
+
+This will:
+1. Build the Docker image with the current source code
+2. Start the container in the background
+3. Watch for changes to `src/**/*.ts` files
+4. Automatically rebuild the image and restart the container when changes are detected
 
 ## API Endpoints
 
-- `GET /` - Welcome message and endpoint list
-- `GET /health` - Health check with database/cache status
-- `GET /api/data` - Protected data endpoint (requires X-API-Key header)
+- `GET /` - Returns server info
+- `GET /health` - Health check endpoint
+- `GET /api/info` - Server status and uptime
 
-## Usage
+## Features
 
-This is used by the `14-local-dev.yaml` workflow. Start the full development environment:
+- **TypeScript**: Full type safety
+- **Express 5**: Latest version with modern features
+- **Docker**: Multi-stage build for optimized production images
+- **Watch Mode**: Automatic rebuild and reload on file changes
+- **Health Checks**: Built-in health check endpoint
 
-```bash
-cd /Users/jonas/dev/ocw/examples
-ocw dev 14-local-dev.yaml
-```
+## Environment Variables
 
-Then visit:
-- http://localhost:3000 - Application
-- http://localhost:3000/health - Health check
-
-The server will automatically reload when you make changes to `server.js`.
+- `PORT` - Server port (default: 3000)
+- `NODE_ENV` - Environment name (default: development)

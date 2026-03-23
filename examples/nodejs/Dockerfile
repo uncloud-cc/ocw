@@ -1,22 +1,36 @@
-# Development Dockerfile for Node.js app with hot reload
-FROM node:20-alpine
+# Build stage
+FROM node:25-alpine AS builder
 
-# Install nodemon globally for hot reloading
-RUN npm install -g nodemon
-
-# Create app directory
 WORKDIR /app
 
-# Copy package files and install dependencies at build time
-COPY package*.json ./
-RUN npm install
+# Copy package files from build context
+COPY package.json pnpm-lock.yaml ./
 
-# Don't copy server.js - it will be mounted from /workflow/nodejs at runtime
-# This enables hot reload to work properly
+# Install pnpm
+# Source: https://pnpm.io/installation#using-other-package-managers
+RUN npm install -g pnpm@latest-10
 
-# Expose port
+# Install all dependencies (including dev for build)
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY tsconfig.json ./
+COPY src ./src
+
+# Build TypeScript
+RUN pnpm build
+
+# Runtime stage
+FROM node:25-alpine
+
+WORKDIR /app
+
+# Copy dependencies from builder
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy compiled dist from builder
+COPY --from=builder /app/dist ./dist
+
 EXPOSE 3000
 
-# Use nodemon for development with hot reload
-# Files will be mounted from /workflow/nodejs
-CMD ["npm", "run", "dev"]
+CMD ["node", "dist/index.js"]

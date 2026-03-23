@@ -1,7 +1,14 @@
 # Open Container Workflow (ocw) Advanced
-This is the second tutorial where we dive into advanced features of ocw workflows. Check-out the [basics tutorial](../basics/README.md) to get an overview of ocw.
 
-Make sure you have the [ocw cli](../basics/README.md#setup) and [Podman](https://podman.io/docs/installation) installed to follow along.
+This is the second tutorial where we dive into advanced features of ocw workflows. Check-out the [basics tutorial](./basics.md) to get an overview of ocw.
+
+Make sure you have the [ocw cli](./basics.md#setup) and [Podman](https://podman.io/docs/installation) installed to follow along.
+
+> 📚 **Want to follow along?** All example files from this tutorial are available in the [`examples/`](../examples/) directory with numbered prefixes (4_, 5_, etc.) to help you follow along progressively. Clone the repo to get started:
+> ```bash
+> git clone https://github.com/uncloud-cc/ocw.git
+> cd ocw/examples
+> ```
 
 **Table of contents**
 
@@ -22,8 +29,8 @@ In ocw, steps either run as a `sequence` or in `parallel`. You can also nest the
 Let's start by seeing a `sequence` in action:
 
 
-```yaml\
-# sequence.yaml
+```yaml
+# 4_sequence.yaml
 name: Sequential workflow!
 sequence:
   - name: Step a)
@@ -34,13 +41,13 @@ sequence:
     cmd: npx cowsay Second step!
 ```
 
-When you run this workflow with `ocw sequence.yaml` the two steps will run one after another.
+When you run this workflow with `ocw 4_sequence.yaml` the two steps will run one after another.
 
 This is great for sequential workflows - like first building a container and then running it.
 
 Next, let's run something in parallel:
 ```yaml
-# parallel.yaml
+# 5_parallel.yaml
 name: Parallel workflow
 parallel:
   - name: Step a) is happening...
@@ -58,7 +65,7 @@ As expected both steps run at the same time and the workflow ends when both have
 You can nest `parallel` inside `sequence` (and vice versa) to create sophisticated workflows:
 
 ```yaml
-# nested.yaml
+# 6_nested.yaml
 name: CI Pipeline
 sequence:
   - name: Setup
@@ -96,7 +103,7 @@ Templating make your ocw workflows dynamic. You've already seen `{{ steps.build.
 Template expressions use double curly braces: `{{ namespace.key }}`. They can be used in almost any string field in your workflow.
 
 ```yaml
-# templates.yaml
+# 7_templates.yaml
 name: Template Demo
 sequence:
   - name: Show Templates
@@ -107,7 +114,7 @@ sequence:
       echo "Home: {{ env.HOME }}"
 ```
 
-Run it with `ocw templates.yaml`:
+Run it with `ocw 7_templates.yaml`:
 
 ```
 ▶ Show Templates [run]
@@ -140,12 +147,12 @@ Templates work in most string fields including:
 Sometimes you need different behavior based on a value. The `switch/case` construct lets you branch your workflow:
 
 ```yaml
-# switch.yaml
+# 8_switch.yaml
 name: Environment Deploy
 
 # Run with different DEPLOY_ENV values:
-#   DEPLOY_ENV=staging ocw switch.yaml     → uses staging case
-#   DEPLOY_ENV=production ocw switch.yaml  → uses production case
+#   DEPLOY_ENV=staging ocw 8_switch.yaml     → uses staging case
+#   DEPLOY_ENV=production ocw 8_switch.yaml  → uses production case
 
 switch: "{{ env.DEPLOY_ENV }}"
 case:
@@ -171,10 +178,10 @@ Run it with different environments:
 
 ```bash
 # Uses staging case
-DEPLOY_ENV=staging ocw switch.yaml
+DEPLOY_ENV=staging ocw 8_switch.yaml
 
 # Uses production case
-DEPLOY_ENV=production ocw switch.yaml
+DEPLOY_ENV=production ocw 8_switch.yaml
 ```
 
 The `switch` expression supports any template, so you can base decisions on:
@@ -189,7 +196,7 @@ Each case can contain a single step or multiple steps in sequence. If the value 
 So far, our workflows have had a single entry point. But real projects need multiple commands: build, test, dev, deploy. Jobs let you define named entry points in one file:
 
 ```yaml
-# jobs.yaml
+# 9_jobs.yaml
 name: My Project
 
 jobs:
@@ -229,7 +236,7 @@ Now you have multiple commands:
 # List available jobs
 ocw
 # Output:
-#   jobs.yaml:
+#   9_jobs.yaml:
 #     - build (Build the App)
 #     - test (Run Tests)
 #     - dev (Development Server)
@@ -248,7 +255,7 @@ Steps can set key-value pairs which other steps can consume. Similar to Github A
 To consume key-value pairs, use [templating](#templating) and reference the outputs using the step-id and the key `{{ steps.<step-id>.<key>}}` 👇🏻
 
 ```yaml
-# outputs.yaml
+# 10_outputs.yaml
 name: Step Outputs
 outputs:
   version: "{{ steps.version.version }}"
@@ -302,7 +309,7 @@ For `run` steps, it's the default workdir.
 
 Let's first see what that looks like for a `run` step:
 ```yaml
-# context.yaml
+# 11_context.yaml
 name: /workdir example
 sequence:
   - name: Print current directory & contents
@@ -315,7 +322,7 @@ sequence:
       ls
 ```
 
-Running this with `ocw pwd.yaml`, this outputs the `/workflow` dir as the (default) working directory and its contents:
+Running this with `ocw 11_context.yaml`, this outputs the `/workflow` dir as the (default) working directory and its contents:
 
 ```bash
 ▶ Pwd & /workdir contents [run]
@@ -328,18 +335,18 @@ Running this with `ocw pwd.yaml`, this outputs the `/workflow` dir as the (defau
   │ Dockerfiles
   │ README.md
   │ demo-build-patterns.yaml
-  │ expose.yaml
+  │ 14_expose.yaml
   │ index.html
-  │ jobs.yaml
-  │ nested.yaml
-  │ networking.yaml
+  │ 9_jobs.yaml
+  │ 6_nested.yaml
+  │ 15_networking.yaml
   │ old stuff
-  │ outputs.yaml
-  │ parallel.yaml
+  │ 10_outputs.yaml
+  │ 5_parallel.yaml
   │ pwd.yaml
-  │ sequence.yaml
-  │ switch.yaml
-  │ templates.yaml
+  │ 4_sequence.yaml
+  │ 8_switch.yaml
+  │ 7_templates.yaml
 ```
 
 For every `run` step, the `/workflow` dir contains the contents of the workflow file's parent folder and is the default dir.
@@ -356,7 +363,7 @@ You can also set a different working directory by specify it as `workdir`:
 Now let's see how the `/worflow` folder is made available in `build` steps:
 
 ```yaml
-# build-context.yaml
+# 12_build_context.yaml
 name: Build context
 sequence:
   - name: Build the container
@@ -397,7 +404,7 @@ By default, the `build` steps also have the `/workflow` folder mounted and have 
 Use `env` to define workflow-level environment variables with optional defaults. Sensitive env vars can be **marked as secrets** and will be masked in output.
 
 ```yaml
-# env-secrets.yaml
+# 13_env_secrets.yaml
 name: Environment and Secrets Demo
 
 env:
@@ -434,7 +441,7 @@ DB_PASSWORD=supersecret123
 API_KEY=sk-test-abc123
 ```
 
-Now run it again with `ocw env-secrets.yaml`. To see the updated secrets in the output, set the `--show-secrets` flag (`ocw env-secrets.yaml --show-secrets`).
+Now run it again with `ocw 13_env_secrets.yaml`. To see the updated secrets in the output, set the `--show-secrets` flag (`ocw 13_env_secrets.yaml --show-secrets`).
 
 > PS: You can set `-e filename.env` to load a different env file
 
@@ -442,7 +449,7 @@ Now run it again with `ocw env-secrets.yaml`. To see the updated secrets in the 
 For development environments, you often need to access services from your host machine. The `expose` option makes container ports accessible:
 
 ```yaml
-# expose.yaml
+# 14_expose.yaml
 name: Exposing containers
 sequence:
   - name: Start Web Server
@@ -462,12 +469,49 @@ expose:
     protocol: http
 ```
 
+## Watch mode
+Another thing that's cruicial for running a local development server is the ability to automatically reload your server on file changes.
+
+With `watch` that becomes straight forward:
+
+```yaml
+# 16_watch.yaml
+name: Express TypeScript Dev Server
+sequence:
+  - name: Build express.js image
+    id: build
+    build:
+      image: ocw-tutorials/express
+      dockerfile: nodejs/Dockerfile
+      context: ./nodejs
+
+  - name: Run Express Server with Watch Mode
+    id: run
+    image: "{{ steps.build.image }}"
+    background: true
+    expose: 3000
+    workdir: /app
+    watch: true
+```
+
+Go ahead and change the code in `nodejs/src/index.ts` (in the `examples` folder) and you'll notice that the container is rebuilt & restarted.
+
+If you want to get fancy with it, you can specify which files should trigger the reload:
+```yaml
+watch:
+  files:
+    - "./nodejs/src/**/*.ts"
+  mode: rebuild-reload
+```
+
+See [reference](../README.md#reference) for details.
+
 ## Container networking
 
 Background containers can be reached by other containers using their `id` as the hostname:
 
 ```yaml
-# networking.yaml
+# 15_networking.yaml
 name: Networking demo
 sequence:
   - name: Start Redis
