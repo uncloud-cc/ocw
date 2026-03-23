@@ -614,12 +614,14 @@ func (p *Podman) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 	// Mount workflow directory at /workflow during build
 	// This makes the workflow directory available at /workflow inside the Dockerfile
 	// consistent with how run steps work
+	// NOTE: Using read-write (rw) to allow build tools like pnpm to write temporary files.
+	// Future: Add filesystem isolation to prevent unwanted modifications to host files.
 	if opts.WorkflowDir != "" {
 		absWorkflowDir, err := filepath.Abs(opts.WorkflowDir)
 		if err != nil {
 			return "", fmt.Errorf("failed to get absolute path for workflow dir: %w", err)
 		}
-		args = append(args, "-v", fmt.Sprintf("%s:/workflow:ro", absWorkflowDir))
+		args = append(args, "-v", fmt.Sprintf("%s:/workflow:rw", absWorkflowDir))
 	}
 
 	// Add context path

@@ -1,0 +1,65 @@
+schemaVersion: "0.1.0"
+name: Watch Mode Example
+
+jobs:
+  # Basic watch mode - watches all files
+  dev:
+    name: Development Server
+    sequence:
+      - name: Start Server
+        id: server
+        image: node:20-alpine
+        background: true
+        expose: 3000
+        watch: true
+        workdir: /workflow
+        cmd: |
+          echo "Server starting..."
+          # In real usage, this would be something like: npm run dev
+          while true; do echo "Running..."; sleep 5; done
+        healthCheck:
+          cmd: "echo healthy"
+          interval: 2s
+          retries: 5
+
+  # Watch specific patterns
+  dev-specific:
+    name: Watch Specific Files
+    sequence:
+      - name: Build
+        id: build
+        build:
+          image: my-app:latest
+          context: .
+
+      - name: Run
+        id: app
+        image: "{{ steps.build.image }}"
+        background: true
+        expose: 8080
+        watch:
+          files:
+            - "src/**/*.js"
+            - "config/*.yaml"
+          ignore:
+            - "**/*.test.js"
+          mode: rebuild-reload
+        cmd: node server.js
+
+  # Job-level watch (applies to all background containers)
+  dev-all:
+    name: Watch All Services
+    watch: true
+    sequence:
+      - name: API Server
+        id: api
+        image: node:20-alpine
+        background: true
+        expose: 3001
+        cmd: echo "API running" && sleep infinity
+
+      - name: Worker
+        id: worker
+        image: node:20-alpine
+        background: true
+        cmd: echo "Worker running" && sleep infinity

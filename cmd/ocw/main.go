@@ -11,8 +11,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/opencontainerworkflow/ocw/pkg/runner"
-	"github.com/opencontainerworkflow/ocw/pkg/schema"
+	"github.com/uncloud-cc/ocw/pkg/runner"
+	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
 var (
@@ -183,6 +183,7 @@ func run() error {
 
 	// Run the workflow or job
 	r := runner.NewRunner(workflowDir)
+	r.WorkflowFile = absWorkflowPath
 	if *envFile != "" {
 		r.WithEnvFile(*envFile)
 	}

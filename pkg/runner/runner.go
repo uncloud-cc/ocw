@@ -13,7 +13,7 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/opencontainerworkflow/ocw/pkg/schema"
+	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
 // StepResult represents the result of a step execution
@@ -55,6 +55,8 @@ type ExposedService struct {
 type Runner struct {
 	// WorkflowDir is the directory containing the workflow file (mounted as /workflow)
 	WorkflowDir string
+	// WorkflowFile is the path to the workflow YAML file
+	WorkflowFile string
 	// EnvFile is the path to the .env file to load (empty means use default .env)
 	EnvFile string
 	// Output function for logging (defaults to fmt.Printf)
@@ -89,6 +91,10 @@ type Runner struct {
 	force bool
 	// runID is a unique identifier for this workflow execution (enables parallel runs)
 	runID string
+	// reloader manages watched containers for watch mode
+	reloader *Reloader
+	// builtImageConfigs stores build configs for rebuilds in watch mode
+	builtImageConfigs map[string]*schema.BuildConfig
 }
 
 // NewRunner creates a new workflow runner
@@ -102,6 +108,7 @@ func NewRunner(workflowDir string) *Runner {
 		Output:               output,
 		podman:               NewPodman(output, styles, nil),
 		builtImages:          make(map[string]string),
+		builtImageConfigs:    make(map[string]*schema.BuildConfig),
 		backgroundContainers: make([]string, 0),
 		exposedServices:      make([]ExposedService, 0),
 		templateCtx:          NewTemplateContext(),
@@ -126,6 +133,13 @@ func (r *Runner) WithShowSecrets(show bool) *Runner {
 func (r *Runner) WithForce(force bool) *Runner {
 	r.force = force
 	return r
+}
+
+// initReloader initializes the reloader if not already done
+func (r *Runner) initReloader() {
+	if r.reloader == nil {
+		r.reloader = NewReloader(r)
+	}
 }
 
 // loadDotEnv loads .env file from the workflow directory and populates
@@ -193,6 +207,27 @@ func (r *Runner) loadDotEnv(workflowEnv schema.Env) error {
 
 	if len(dotenv.Vars) > 0 {
 		r.Output("  %s %s\n", r.styles.Dim(fmt.Sprintf("Loaded %d variable(s) from", len(dotenv.Vars))), r.styles.Value(envFileName))
+	}
+
+	return nil
+}
+
+// reloadWorkflowEnv re-parses the workflow file and reloads environment variables
+// This is called during watch mode reloads when the workflow file or .env file changes
+func (r *Runner) reloadWorkflowEnv() error {
+	if r.WorkflowFile == "" {
+		return nil // No workflow file to reload
+	}
+
+	// Re-parse the workflow file
+	ocw, err := schema.ParseFile(r.WorkflowFile)
+	if err != nil {
+		return fmt.Errorf("failed to re-parse workflow file: %w", err)
+	}
+
+	// Reload .env file with new workflow env as defaults
+	if err := r.loadDotEnv(ocw.Env); err != nil {
+		return fmt.Errorf("failed to reload .env: %w", err)
 	}
 
 	return nil
@@ -351,6 +386,11 @@ func (r *Runner) maskSecretsInString(text string) string {
 
 // cleanupBackgroundContainers stops and removes all background containers
 func (r *Runner) cleanupBackgroundContainers() {
+	// Stop reloader first (stops file watchers and pending reloads)
+	if r.reloader != nil {
+		r.reloader.Stop()
+	}
+
 	r.backgroundMu.Lock()
 	containers := make([]string, len(r.backgroundContainers))
 	copy(containers, r.backgroundContainers)
@@ -575,6 +615,12 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 		return fmt.Errorf("failed to create network: %w", err)
 	}
 
+	// Apply job-level watch config to background steps that don't have explicit watch
+	if job.Watch != nil && job.Watch.IsEnabled() {
+		r.applyJobWatchToSteps(job.Parallel, job.Watch)
+		r.applyJobWatchToSteps(job.Sequence, job.Watch)
+	}
+
 	start := time.Now()
 
 	var err error
@@ -608,6 +654,23 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 	}
 
 	return err
+}
+
+// applyJobWatchToSteps applies job-level watch config to steps without explicit watch
+func (r *Runner) applyJobWatchToSteps(steps []schema.Step, jobWatch *schema.Watch) {
+	for i := range steps {
+		step := &steps[i]
+		if step.RunStep != nil && step.RunStep.Background && step.RunStep.Watch == nil {
+			step.RunStep.Watch = jobWatch
+		}
+		// Recurse into nested steps
+		if step.ParallelStep != nil {
+			r.applyJobWatchToSteps(step.ParallelStep.Parallel, jobWatch)
+		}
+		if step.SequenceStep != nil {
+			r.applyJobWatchToSteps(step.SequenceStep.Sequence, jobWatch)
+		}
+	}
 }
 
 // runParallel executes steps in parallel
@@ -721,6 +784,30 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		name = "run"
 	}
 
+	// If watch mode is enabled, implicitly run as background container
+	// (watch mode only works with long-running/background containers)
+	if step.Watch != nil && step.Watch.IsEnabled() && !step.Background {
+		step.Background = true
+	}
+
+	// Extract build step ID from image template if present (for watch mode)
+	// Pattern: {{ steps.<id>.image }} or variants with whitespace
+	var referencedBuildStepID string
+	if step.Image != "" && strings.Contains(step.Image, "steps.") && strings.Contains(step.Image, ".image") {
+		// Use a simple parser to extract the build step ID
+		// Look for pattern: {{ steps.<id>.image }}
+		startIdx := strings.Index(step.Image, "steps.")
+		if startIdx != -1 {
+			// Find the start of the ID (after "steps.")
+			idStart := startIdx + len("steps.")
+			// Find the end of the ID (look for ".")
+			idEnd := strings.Index(step.Image[idStart:], ".")
+			if idEnd != -1 {
+				referencedBuildStepID = strings.TrimSpace(step.Image[idStart : idStart+idEnd])
+			}
+		}
+	}
+
 	// Interpolate template expressions in image name
 	image, err := r.templateCtx.Interpolate(step.Image)
 	if err != nil {
@@ -791,7 +878,11 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	}
 
 	// Build environment variables map and interpolate values
+	// Start with workflow-level env vars, then merge step-level (step overrides workflow)
 	env := make(map[string]string)
+	for k, v := range r.templateCtx.Env {
+		env[k] = v
+	}
 	if step.RunEnv != nil {
 		if step.RunEnv.Map != nil {
 			for k, v := range step.RunEnv.Map {
@@ -836,15 +927,24 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 			hostname = string(step.ID)
 			r.Output("  %s %s\n", r.styles.Label("Hostname:"), r.styles.Value(hostname))
 		} else if name != "" && name != "run" {
-			// No ID, but has a name - validate it as a valid hostname
+			// No ID, but has a name - try to use it as hostname if valid
 			if isValidHostname(name) {
 				containerName = fmt.Sprintf("ocw-%s-%s", r.runID, sanitizeName(name))
 				hostname = name
 				r.Output("  %s %s\n", r.styles.Label("Hostname:"), r.styles.Value(hostname))
 			} else {
-				return fmt.Errorf("background container needs a valid 'id' for networking. "+
-					"Name %q is not a valid hostname (use lowercase letters, numbers, and hyphens only). "+
-					"Add 'id: <valid-hostname>' to enable container-to-container communication", name)
+				// Name is not a valid hostname - only allow this for watch mode
+				if step.Watch != nil && step.Watch.IsEnabled() {
+					// For watch mode, sanitize the name to make it a valid hostname
+					sanitized := sanitizeName(name)
+					containerName = fmt.Sprintf("ocw-%s-%s", r.runID, sanitized)
+					hostname = sanitized
+					r.Output("  %s %s\n", r.styles.Label("Hostname:"), r.styles.Value(hostname))
+				} else {
+					return fmt.Errorf("background container needs a valid 'id' for networking. "+
+						"Name %q is not a valid hostname (use lowercase letters, numbers, and hyphens only). "+
+						"Add 'id: <valid-hostname>' to enable container-to-container communication", name)
+				}
 			}
 		} else {
 			// No ID and no valid name - generate unique name but warn about networking
@@ -942,6 +1042,28 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	// Track background containers for cleanup
 	if step.Background && containerName != "" {
 		r.registerBackgroundContainer(containerName)
+	}
+
+	// Set up watch mode if enabled
+	if step.Background && step.Watch != nil && step.Watch.IsEnabled() {
+		r.initReloader()
+
+		wc := &WatchedContainer{
+			StepID:        string(step.ID),
+			StepName:      string(step.Name),
+			Image:         image,
+			ContainerName: containerName,
+			WatchConfig:   step.Watch,
+			RunStep:       step,
+			BuildStepID:   referencedBuildStepID,
+			PortMappings:  portMappings,
+		}
+
+		if err := r.reloader.RegisterContainer(wc); err != nil {
+			r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to set up watch mode: %v", err)))
+		} else {
+			r.Output("  %s %s\n", r.styles.Label("Watch:"), r.styles.Value("enabled"))
+		}
 	}
 
 	// Register exposed services for summary
@@ -1042,6 +1164,11 @@ func (r *Runner) runBuildStep(ctx context.Context, step *schema.BuildStep) error
 		// Also register in template context for ${{ steps.<id>.image }}
 		r.templateCtx.SetStepOutput(string(step.ID), "image", builtImage)
 		r.Output("  %s %s\n", r.styles.Dim("Registered:"), r.styles.Value(fmt.Sprintf("steps.%s.image = %s", step.ID, builtImage)))
+
+		// Store build config for watch mode rebuilds
+		r.builtImagesMu.Lock()
+		r.builtImageConfigs[string(step.ID)] = &step.Build
+		r.builtImagesMu.Unlock()
 	}
 
 	r.Output(r.styles.StepComplete(name, true))
@@ -1116,7 +1243,12 @@ func sanitizeName(name string) string {
 	result := make([]byte, 0, len(name))
 	for i := 0; i < len(name); i++ {
 		c := name[i]
-		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
+		if c >= 'a' && c <= 'z' {
+			result = append(result, c)
+		} else if c >= 'A' && c <= 'Z' {
+			// Convert uppercase to lowercase
+			result = append(result, c+32)
+		} else if (c >= '0' && c <= '9') || c == '-' || c == '_' {
 			result = append(result, c)
 		} else if c == ' ' {
 			result = append(result, '-')

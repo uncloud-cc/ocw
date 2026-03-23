@@ -12,31 +12,6 @@
         }
       ]
     },
-    "BooleanInput": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/boolean-input",
-      "properties": {
-        "description": {
-          "type": "string"
-        },
-        "required": {
-          "type": "boolean",
-          "default": false
-        },
-        "type": {
-          "type": "string"
-        },
-        "default": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "required": [
-        "required",
-        "type"
-      ]
-    },
     "BuildConfig": {
       "properties": {
         "image": {
@@ -320,7 +295,7 @@
     },
     "BuildStep": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/build-step",
+      "$id": "https://github.com/uncloud-cc/ocw/pkg/schema/build-step",
       "properties": {
         "name": {
           "type": "string",
@@ -341,7 +316,7 @@
         },
         "env": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/$defs/EnvVar"
           },
           "type": "object"
         },
@@ -368,37 +343,20 @@
         "build"
       ]
     },
-    "ChoiceInput": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/choice-input",
+    "EnvVar": {
       "properties": {
-        "description": {
+        "Value": {
           "type": "string"
         },
-        "required": {
-          "type": "boolean",
-          "default": false
-        },
-        "type": {
-          "type": "string"
-        },
-        "options": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array",
-          "minItems": 1
-        },
-        "default": {
-          "type": "string"
+        "IsSecret": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
-        "required",
-        "type",
-        "options"
+        "Value",
+        "IsSecret"
       ]
     },
     "Expose": {
@@ -494,22 +452,6 @@
         "env"
       ]
     },
-    "Input": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/StringInput"
-        },
-        {
-          "$ref": "#/$defs/NumberInput"
-        },
-        {
-          "$ref": "#/$defs/BooleanInput"
-        },
-        {
-          "$ref": "#/$defs/ChoiceInput"
-        }
-      ]
-    },
     "Job": {
       "properties": {
         "name": {
@@ -518,6 +460,9 @@
         },
         "description": {
           "type": "string"
+        },
+        "watch": {
+          "$ref": "#/$defs/Watch"
         },
         "outputs": {
           "additionalProperties": {
@@ -559,37 +504,6 @@
       },
       "type": "object"
     },
-    "NumberInput": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/number-input",
-      "properties": {
-        "description": {
-          "type": "string"
-        },
-        "required": {
-          "type": "boolean",
-          "default": false
-        },
-        "type": {
-          "type": "string"
-        },
-        "default": {
-          "type": "number"
-        },
-        "min": {
-          "type": "number"
-        },
-        "max": {
-          "type": "number"
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "required": [
-        "required",
-        "type"
-      ]
-    },
     "NumberOrString": {
       "anyOf": [
         {
@@ -602,7 +516,7 @@
     },
     "ParallelStep": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/parallel-step",
+      "$id": "https://github.com/uncloud-cc/ocw/pkg/schema/parallel-step",
       "properties": {
         "name": {
           "type": "string",
@@ -623,7 +537,7 @@
         },
         "env": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/$defs/EnvVar"
           },
           "type": "object"
         },
@@ -654,7 +568,7 @@
     },
     "RunStep": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/run-step",
+      "$id": "https://github.com/uncloud-cc/ocw/pkg/schema/run-step",
       "properties": {
         "name": {
           "type": "string",
@@ -715,6 +629,9 @@
         "expose": {
           "$ref": "#/$defs/Expose"
         },
+        "watch": {
+          "$ref": "#/$defs/Watch"
+        },
         "envFile": {
           "$ref": "#/$defs/StringOrStringSlice"
         },
@@ -773,7 +690,7 @@
     },
     "SequenceStep": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/sequence-step",
+      "$id": "https://github.com/uncloud-cc/ocw/pkg/schema/sequence-step",
       "properties": {
         "name": {
           "type": "string",
@@ -794,7 +711,7 @@
         },
         "env": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/$defs/EnvVar"
           },
           "type": "object"
         },
@@ -858,41 +775,6 @@
         }
       ]
     },
-    "StringInput": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/string-input",
-      "properties": {
-        "description": {
-          "type": "string"
-        },
-        "required": {
-          "type": "boolean",
-          "default": false
-        },
-        "type": {
-          "type": "string",
-          "default": "string"
-        },
-        "default": {
-          "type": "string"
-        },
-        "pattern": {
-          "type": "string"
-        },
-        "minLength": {
-          "type": "integer"
-        },
-        "maxLength": {
-          "type": "integer"
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "required": [
-        "required",
-        "type"
-      ]
-    },
     "StringMapOrSlice": {
       "anyOf": [
         {
@@ -924,7 +806,7 @@
     },
     "SwitchStep": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/switch-step",
+      "$id": "https://github.com/uncloud-cc/ocw/pkg/schema/switch-step",
       "properties": {
         "name": {
           "type": "string",
@@ -945,7 +827,7 @@
         },
         "env": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/$defs/EnvVar"
           },
           "type": "object"
         },
@@ -981,6 +863,64 @@
         "case"
       ]
     },
+    "Watch": {
+      "properties": {
+        "Bool": {
+          "type": "boolean"
+        },
+        "String": {
+          "type": "string"
+        },
+        "Strings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "Config": {
+          "$ref": "#/$defs/WatchConfig"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "Bool",
+        "String",
+        "Strings",
+        "Config"
+      ]
+    },
+    "WatchConfig": {
+      "properties": {
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ignore": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "useGitIgnore": {
+          "type": "boolean"
+        },
+        "useDockerIgnore": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "rebuild-reload",
+            "reload"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
     "WorkflowConfig": {
       "properties": {
         "from": {
@@ -988,7 +928,7 @@
         },
         "env": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/$defs/EnvVar"
           },
           "type": "object"
         },
@@ -1000,9 +940,6 @@
         },
         "inherit": {
           "$ref": "#/$defs/InheritConfig"
-        },
-        "inputs": {
-          "type": "object"
         }
       },
       "additionalProperties": false,
@@ -1013,7 +950,7 @@
     },
     "WorkflowStep": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/opencontainerworkflow/ocw/pkg/schema/workflow-step",
+      "$id": "https://github.com/uncloud-cc/ocw/pkg/schema/workflow-step",
       "properties": {
         "name": {
           "type": "string",
@@ -1034,7 +971,7 @@
         },
         "env": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/$defs/EnvVar"
           },
           "type": "object"
         },
@@ -1082,15 +1019,9 @@
       },
       "type": "object"
     },
-    "inputs": {
-      "additionalProperties": {
-        "$ref": "#/$defs/Input"
-      },
-      "type": "object"
-    },
     "env": {
       "additionalProperties": {
-        "type": "string"
+        "$ref": "#/$defs/EnvVar"
       },
       "type": "object"
     },

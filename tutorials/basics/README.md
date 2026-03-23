@@ -14,7 +14,7 @@ Before we jump in, you need to install three things on your local machine to get
 
 - [Podman](https://podman.io/docs/installation) it's an open-source container runtime that's secure by design
 - [Go](https://go.dev/dl/) for being able to run the `ocw cli`
-- [ocw cli](../../README.md#install) for running ocw workflows → Just run `go install github.com/opencontainerworkflow/ocw/cmd`
+- [ocw cli](../../README.md#install) for running ocw workflows → Just run `go install github.com/uncloud-cc/ocw/cmd`
 
 ## Hello World!
 
@@ -144,4 +144,4 @@ Good job, working through the basics. Next, go to the [advanced tutorial](../adv
 - And more!
 
 **Got feedback?**\
-[Join the community on Github](https://github.com/opencontainerworkflow/ocw/discussions) to ask questions, get help and share feedback.
+[Join the community on Github](https://github.com/uncloud-cc/ocw/discussions) to ask questions, get help and share feedback.

@@ -16,6 +16,10 @@ type Job struct {
 	// Description is an optional human-readable description
 	Description Description `yaml:"description,omitempty" json:"description,omitempty"`
 
+	// Watch enables automatic reloading for all background steps in this job.
+	// Individual steps can override this setting.
+	Watch *Watch `yaml:"watch,omitempty" json:"watch,omitempty"`
+
 	// Outputs defines values to expose after the job completes.
 	// Values can reference step outputs using template syntax: {{ <step-id>.<output> }}
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty"`

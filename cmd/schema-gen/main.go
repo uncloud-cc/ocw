@@ -12,7 +12,7 @@ import (
 	"reflect"
 
 	"github.com/invopop/jsonschema"
-	"github.com/opencontainerworkflow/ocw/pkg/schema"
+	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
 func main() {
@@ -36,16 +36,19 @@ func main() {
 	addDefinition(r, s, "SequenceStep", schema.SequenceStep{})
 	addDefinition(r, s, "WorkflowStep", schema.WorkflowStep{})
 	addDefinition(r, s, "SwitchStep", schema.SwitchStep{})
-	addDefinition(r, s, "StringInput", schema.StringInput{})
-	addDefinition(r, s, "NumberInput", schema.NumberInput{})
-	addDefinition(r, s, "BooleanInput", schema.BooleanInput{})
-	addDefinition(r, s, "ChoiceInput", schema.ChoiceInput{})
+	// TODO: StringInput, NumberInput, BooleanInput, ChoiceInput are not yet implemented
+	// addDefinition(r, s, "StringInput", schema.StringInput{})
+	// addDefinition(r, s, "NumberInput", schema.NumberInput{})
+	// addDefinition(r, s, "BooleanInput", schema.BooleanInput{})
+	// addDefinition(r, s, "ChoiceInput", schema.ChoiceInput{})
 	addDefinition(r, s, "BuildConfig", schema.BuildConfig{})
 	addDefinition(r, s, "WorkflowConfig", schema.WorkflowConfig{})
 	addDefinition(r, s, "InheritConfig", schema.InheritConfig{})
 	addDefinition(r, s, "BoolOrString", schema.BoolOrString{})
 	addDefinition(r, s, "BuildOutput", schema.BuildOutput{})
 	addDefinition(r, s, "BuildSecrets", schema.BuildSecrets{})
+	addDefinition(r, s, "Watch", schema.Watch{})
+	addDefinition(r, s, "WatchConfig", schema.WatchConfig{})
 
 	// Set schema metadata
 	s.Version = "https://json-schema.org/draft/2020-12/schema"

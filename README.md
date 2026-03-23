@@ -3,19 +3,28 @@
 Container-native workflows for local development & CI/CD.
 
 ## Example
+```javascript
+// server.js
+require('http').createServer((_, res) => {
+  res.end(`Hello world!`);
+}).listen(8888);
+```
+
 ```yaml
 # hello.yaml
 name: Hello World
-env:
-  NAME: world
 sequence:
-  - name: Say Hello
-    image: alpine:latest
-    cmd: echo "Hello {{ env.NAME }} 🎉"
+  - id: server
+    image: node:25-alpine
+    cmd: node server.js
 
-# Run the workflow:
-# NAME=Ada ocw hello.yaml
+    # Make it a hot-reloading dev server
+    background: true
+    watch: true
+    expose: 8888
 ```
+
+Run the workflow with `ocw hello.yaml` and play around with `server.js` to see hot-reloading in action ✨
 
 ## Install
 
@@ -24,7 +33,7 @@ Make sure you have these two installed:
 - [Go](https://go.dev/dl/) `v1.24`
 - [Podman](https://podman.io/docs/installation) `v5.7`
 
-Then install the `ocw` CLI: `go install github.com/opencontainerworkflow/ocw/cmd/ocw@<commit-hash>`
+Then install the `ocw` CLI: `go install github.com/uncloud-cc/ocw/cmd/ocw@<commit-hash>`
 
 Check if it worked by running `ocw --help`
 
@@ -36,7 +45,7 @@ Check if it worked by running `ocw --help`
 
 ## Feedback
 
-[Join the community](https://github.com/opencontainerworkflow/ocw/discussions) to ask questions, get help and share feedback.
+[Join the community](https://github.com/uncloud-cc/ocw/discussions) to ask questions, get help and share feedback.
 
 ## License
 

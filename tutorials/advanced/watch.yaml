@@ -1,0 +1,27 @@
+name: Express TypeScript Dev Server
+sequence:
+  - name: Build express.js image
+    id: build
+    build:
+      image: ocw-tutorials/express
+      dockerfile: nodejs/Dockerfile
+      context: ./nodejs
+
+  - name: Run Express Server with Watch Mode
+    id: run
+    image: "{{ steps.build.image }}"
+    background: true
+    expose: 3000
+    workdir: /app
+    # watch: true   # This simple version would work as well -> By default .gitignore contents are honored
+    watch:
+      files:
+        - "./nodejs/src/**/*.ts"
+      mode: rebuild-reload
+    env:
+      NODE_ENV: development
+    healthCheck:
+      cmd: "sh -c 'nc -z localhost 3000 || exit 1'"
+      interval: 2s
+      timeout: 3s
+      retries: 5
