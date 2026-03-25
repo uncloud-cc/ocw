@@ -26,6 +26,9 @@ type OCW struct {
 	// Outputs are optional workflow outputs
 	Outputs Outputs `yaml:"outputs,omitempty" json:"outputs,omitempty"`
 
+	// Volumes are named volumes for host filesystem access
+	Volumes Volumes `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+
 	// Jobs are named entry points that can be run via `ocw <job-name>`
 	Jobs Jobs `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 

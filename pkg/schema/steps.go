@@ -313,6 +313,10 @@ type RunStep struct {
 	Quiet bool `yaml:"quiet,omitempty" json:"quiet,omitempty"`
 	// TTY allocates pseudo-TTY (useful for colored output)
 	TTY bool `yaml:"tty,omitempty" json:"tty,omitempty"`
+
+	// === Volume Access ===
+	// Volumes grant access to named volumes for this step
+	Volumes VolumeRefs `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 }
 
 // OutputType represents build output types
@@ -725,6 +729,10 @@ type BuildStep struct {
 	StepBase `yaml:",inline" json:",inline"`
 	// Build is the build configuration
 	Build BuildConfig `yaml:"build" json:"build" jsonschema:"required"`
+
+	// === Volume Access ===
+	// Volumes grant access to named volumes during build
+	Volumes VolumeRefs `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 }
 
 // ParallelStep represents a step that runs steps in parallel

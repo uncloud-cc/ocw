@@ -1,0 +1,10 @@
+name = "Simple"
+description = "A minimal theme for OCW demo"
+homepage = "https://example.com"
+tags = ["minimal", "simple", "demo"]
+features = ["responsive", "minimal"]
+min_version = "0.100.0"
+
+[author]
+  name = "OCW Demo"
+  homepage = "https://example.com"

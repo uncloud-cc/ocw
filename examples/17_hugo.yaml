@@ -1,0 +1,107 @@
+name: Hugo static site dev server & deployment
+
+volumes:
+  # Source content - read-only by default
+  content:
+    path: ./website/content
+    # mode: readonly (default)
+    mountPath: /src/content
+
+  # Hugo configuration and templates
+  # Note: Set to readwrite because Hugo dev server needs write access for .hugo_build.lock
+  site:
+    path: ./website/site
+    mode: readwrite
+    mountPath: /src/site
+
+  # Build output - needs write access
+  dist:
+    path: ./website/dist
+    mode: readwrite
+    mountPath: /output
+
+  # AWS credentials for deployment
+  secrets:
+    path: ~/.aws
+    mountPath: /root/.aws
+
+jobs:
+  # Development server with hot reload
+  # Run 'ocw dev' then open http://localhost:1313 in your browser
+  dev:
+    # All volumes needed for development
+    volumes:
+      - content
+      - site
+      - dist
+
+    sequence:
+      - name: Hugo dev server
+        id: hugo-dev
+        # Use hugomods/hugo which supports multiple versions and variants
+        image: hugomods/hugo:latest
+        # Run Hugo dev server in background with watch mode
+        cmd: hugo server --source /src/site --contentDir /src/content --destination /output --bind 0.0.0.0 --port 1313 --watch --minify
+        background: true
+        # Expose port 1313 for browser access
+        expose: 1313
+        # Enable watch mode for automatic rebuilding
+        watch:
+          files:
+            - /src/content/**/*.md
+            - /src/site/**/*.html
+            - /src/site/**/*.css
+        volumes:
+          - name: content
+            mountPath: /src/content
+          - name: site
+            mountPath: /src/site
+          - name: dist
+            mountPath: /output
+
+  build:
+    # Grant all steps access to content and site config
+    volumes:
+      - content
+      - site
+
+    sequence:
+      - name: Build Hugo site
+        # Use hugomods/hugo for building too
+        image: hugomods/hugo:latest
+        # Hugo generates static site from /src/site to /output
+        cmd: hugo --source /src/site --contentDir /src/content --destination /output --minify
+        volumes:
+          - dist
+
+      - name: Verify output
+        image: alpine
+        # Mount readwrite volume as read-only for safety
+        # Also demonstrates mountPath override: uses /public instead of /output
+        volumes:
+          - name: dist
+            mountPath: /public
+            readonly: true
+        cmd: |
+          echo "Generated files in /public:"
+          find /public -type f | head -20
+          echo ""
+          echo "Total files: $(find /public -type f | wc -l)"
+
+  deploy:
+    # Multiple volumes at job level
+    volumes:
+      - dist
+      - secrets
+
+    sequence:
+      - name: Deploy to S3
+        image: amazon/aws-cli
+        cmd: aws s3 sync /output s3://my-bucket --delete
+
+  # Job with single step (shortcut syntax)
+  # Shorthand: 'volumes: dist' is equivalent to 'volumes: [dist]' or 'volumes: [{name: dist}]'
+  clean:
+    volumes: dist
+    image: alpine
+    cmd: rm -rf /output/* && echo "Cleaned ./website/dist/"

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="{{ .Site.LanguageCode | default "en" }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} - {{ .Site.Title }}</title>
+    {{ $style := resources.Get "css/style.css" }}
+    {{ if $style }}
+    <link rel="stylesheet" href="{{ $style.RelPermalink }}">
+    {{ end }}
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="{{ .Site.BaseURL }}" class="logo">{{ .Site.Title }}</a>
+            <ul class="nav-links">
+                {{ range .Site.Menus.main }}
+                <li><a href="{{ .URL }}">{{ .Name }}</a></li>
+                {{ end }}
+            </ul>
+        </nav>
+    </header>
+    
+    <main>
+        {{ block "main" . }}{{ end }}
+    </main>
+    
+    <footer>
+        <p>Built with <a href="https://github.com/uncloud-cc/ocw">OCW</a> & Hugo</p>
+    </footer>
+</body>
+</html>

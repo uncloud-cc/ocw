@@ -229,6 +229,7 @@ type RunContainerOptions struct {
 	Env          map[string]string  // Environment variables
 	WorkDir      string             // Working directory inside container
 	WorkflowDir  string             // Host path to mount as /workflow
+	VolumeMounts []VolumeMount      // Additional volume mounts (for explicit host access)
 	TTY          bool               // Allocate TTY
 	Remove       bool               // Remove container after exit (default true for non-background)
 	Background   bool               // Run in background (detached)
@@ -320,6 +321,18 @@ func (p *Podman) RunContainer(ctx context.Context, opts RunContainerOptions) err
 			return fmt.Errorf("failed to get absolute path for workflow dir: %w", err)
 		}
 		args = append(args, "-v", fmt.Sprintf("%s:/workflow:rw", absPath))
+	}
+
+	// Mount explicit volumes
+	for _, mount := range opts.VolumeMounts {
+		mode := "rw"
+		if mount.ReadOnly {
+			mode = "ro"
+		}
+		args = append(args, "-v", fmt.Sprintf("%s:%s:%s",
+			mount.HostPath,
+			mount.ContainerPath,
+			mode))
 	}
 
 	// Entrypoint override
@@ -516,13 +529,14 @@ func (p *Podman) RemoveExistingContainer(ctx context.Context, containerName stri
 
 // BuildImageOptions holds options for building an image
 type BuildImageOptions struct {
-	ImageName   string            // Primary image tag
-	Context     string            // Build context path
-	Dockerfile  string            // Dockerfile path (relative to context)
-	BuildArgs   map[string]string // Build arguments
-	Target      string            // Multi-stage build target
-	Tags        []string          // Additional tags
-	WorkflowDir string            // Host path that serves as /workflow reference
+	ImageName    string            // Primary image tag
+	Context      string            // Build context path
+	Dockerfile   string            // Dockerfile path (relative to context)
+	BuildArgs    map[string]string // Build arguments
+	Target       string            // Multi-stage build target
+	Tags         []string          // Additional tags
+	WorkflowDir  string            // Host path that serves as /workflow reference
+	VolumeMounts []VolumeMount     // Additional volume mounts during build
 }
 
 // BuildImage builds an image using podman build
@@ -622,6 +636,18 @@ func (p *Podman) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 			return "", fmt.Errorf("failed to get absolute path for workflow dir: %w", err)
 		}
 		args = append(args, "-v", fmt.Sprintf("%s:/workflow:rw", absWorkflowDir))
+	}
+
+	// Mount explicit volumes during build
+	for _, mount := range opts.VolumeMounts {
+		mode := "rw"
+		if mount.ReadOnly {
+			mode = "ro"
+		}
+		args = append(args, "-v", fmt.Sprintf("%s:%s:%s",
+			mount.HostPath,
+			mount.ContainerPath,
+			mode))
 	}
 
 	// Add context path

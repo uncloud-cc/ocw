@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,9 @@ type WatchedContainer struct {
 	WatchConfig   *schema.Watch
 	RunStep       *schema.RunStep
 	BuildStepID   string // ID of the build step if using a built image
+
+	// Volume mounts for translating container paths to host paths
+	VolumeMounts []VolumeMount
 
 	// Runtime state
 	mu           sync.Mutex
@@ -104,6 +108,11 @@ func (r *Reloader) RegisterContainer(wc *WatchedContainer) error {
 		files = append(files, ".env")
 	}
 
+	// Translate container paths to host paths using volume mounts
+	for i, pattern := range files {
+		files[i] = r.translateContainerPathToHost(pattern, wc.VolumeMounts)
+	}
+
 	// Update watch config with the new files
 	if len(files) > 0 {
 		watchConfig.Config = &schema.WatchConfig{
@@ -148,6 +157,36 @@ func (r *Reloader) getDockerfileForBuildStep(buildStepID string) string {
 // boolPtr is a helper to create a pointer to a bool value
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// translateContainerPathToHost converts a container path pattern to a host path pattern
+// using the volume mounts. If the path doesn't match any volume mount prefix, it returns the original path.
+func (r *Reloader) translateContainerPathToHost(containerPath string, mounts []VolumeMount) string {
+	if len(mounts) == 0 {
+		return containerPath
+	}
+
+	// Sort mounts by container path length (longest first) to get most specific match
+	sortedMounts := make([]VolumeMount, len(mounts))
+	copy(sortedMounts, mounts)
+	for i := range sortedMounts {
+		for j := i + 1; j < len(sortedMounts); j++ {
+			if len(sortedMounts[i].ContainerPath) < len(sortedMounts[j].ContainerPath) {
+				sortedMounts[i], sortedMounts[j] = sortedMounts[j], sortedMounts[i]
+			}
+		}
+	}
+
+	// Check if this path matches any volume mount
+	for _, mount := range sortedMounts {
+		if strings.HasPrefix(containerPath, mount.ContainerPath) {
+			// Replace the container path prefix with the host path
+			suffix := strings.TrimPrefix(containerPath, mount.ContainerPath)
+			return mount.HostPath + suffix
+		}
+	}
+
+	return containerPath
 }
 
 // sanitizeNameForHostname converts a name to a valid hostname (lowercase, hyphens instead of spaces)
@@ -367,20 +406,21 @@ func (r *Reloader) justReload(ctx context.Context, wc *WatchedContainer) error {
 	}
 
 	opts := RunContainerOptions{
-		Name:        wc.ContainerName,
-		Hostname:    hostname,
-		Network:     r.runner.networkName,
-		Image:       wc.Image,
-		Cmd:         cmd,
-		Args:        args,
-		Entrypoint:  entrypoint,
-		Env:         env,
-		WorkDir:     workDir,
-		WorkflowDir: r.runner.WorkflowDir,
-		TTY:         wc.RunStep.TTY,
-		Remove:      false,
-		Background:  true,
-		Force:       true,
+		Name:         wc.ContainerName,
+		Hostname:     hostname,
+		Network:      r.runner.networkName,
+		Image:        wc.Image,
+		Cmd:          cmd,
+		Args:         args,
+		Entrypoint:   entrypoint,
+		Env:          env,
+		WorkDir:      workDir,
+		WorkflowDir:  r.runner.WorkflowDir,
+		VolumeMounts: wc.VolumeMounts, // Include volume mounts from watched container
+		TTY:          wc.RunStep.TTY,
+		Remove:       false,
+		Background:   true,
+		Force:        true,
 	}
 
 	// Process port mappings - reuse existing ports if available

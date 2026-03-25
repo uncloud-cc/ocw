@@ -1,0 +1,18 @@
+baseURL = 'https://example.com'
+languageCode = 'en-us'
+title = 'My OCW Demo Site'
+theme = 'simple'
+
+[params]
+  author = 'OCW User'
+  description = 'A demo site built with OCW volume mounts'
+
+[menu]
+  [[menu.main]]
+    name = 'Home'
+    url = '/'
+    weight = 10
+  [[menu.main]]
+    name = 'Posts'
+    url = '/posts/'
+    weight = 20

@@ -24,6 +24,9 @@ type Job struct {
 	// Values can reference step outputs using template syntax: {{ <step-id>.<output> }}
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty"`
 
+	// Volumes grant access to named volumes for all steps in this job
+	Volumes VolumeRefs `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+
 	// Flow control - exactly one of these should be set
 	// Parallel runs steps in parallel
 	Parallel []Step `yaml:"parallel,omitempty" json:"parallel,omitempty"`

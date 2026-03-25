@@ -22,6 +22,7 @@ Make sure you have the [ocw cli](./basics.md#setup) and [Podman](https://podman.
 - [`env` and `secrets`](#env-and-secrets)
 - [Exposing containers](#exposing-containers)
 - [Container networking](#container-networking)
+- [Watch mode](#watch-mode)
 
 ## Parallel & Sequence
 In ocw, steps either run as a `sequence` or in `parallel`. You can also nest the two to express any workflow that comes to mind.
@@ -469,6 +470,24 @@ expose:
     protocol: http
 ```
 
+## Container networking
+
+Background containers can be reached by other containers using their `id` as the hostname:
+
+```yaml
+# 15_networking.yaml
+name: Networking demo
+sequence:
+  - name: Start Redis
+    id: redis # This becomes the hostname
+    image: redis:7-alpine
+    background: true
+
+  - name: Use Redis
+    image: redis:7-alpine
+    cmd: redis-cli -h redis SET hello world # Connect via hostname "redis"
+```
+
 ## Watch mode
 Another thing that's cruicial for running a local development server is the ability to automatically reload your server on file changes.
 
@@ -506,20 +525,119 @@ watch:
 
 See [reference](../README.md#reference) for details.
 
-## Container networking
+## Volume mounts (Full example)
 
-Background containers can be reached by other containers using their `id` as the hostname:
+Volume mounts let you share directories between your host and containers. Unlike the automatic `/workflow` mount, volumes give you fine-grained control over what gets mounted, where, and with what permissions.
+
+By mounting parts of your system into containers, ocw workflows can easily serve as replacements for Makefile or setup scripts.
+
+Let's look at a real-world example: a Hugo static site workflow with dev server, build, and deploy jobs.
+
+### Defining volumes
+
+Volumes are defined at the workflow level and referenced by name in jobs and steps:
 
 ```yaml
-# 15_networking.yaml
-name: Networking demo
-sequence:
-  - name: Start Redis
-    id: redis # This becomes the hostname
-    image: redis:7-alpine
-    background: true
+# 17_hugo.yaml
+name: Hugo static site dev server & deployment
 
-  - name: Use Redis
-    image: redis:7-alpine
-    cmd: redis-cli -h redis SET hello world # Connect via hostname "redis"
+volumes:
+  # Source content - read-only by default
+  content:
+    path: ./website/content
+    # mode: readonly (default)
+    mountPath: /src/content
+
+  # Hugo config - needs write access for .hugo_build.lock
+  site:
+    path: ./website/site
+    mode: readwrite
+    mountPath: /src/site
+
+  # Build output - needs write access
+  dist:
+    path: ./website/dist
+    mode: readwrite
+    mountPath: /output
+
+  # AWS credentials for deployment
+  secrets:
+    path: ~/.aws
+    mountPath: /root/.aws
+```
+
+Each volume has:
+- **`path`**: The host directory (relative to workflow file, or absolute like `~/.aws`)
+- **`mountPath`**: Where it appears inside containers
+- **`mode`**: Either `readonly` (read-only, default) or `readwrite` (read-write)
+
+### Using volumes in jobs
+
+Reference volumes at the job level to grant all steps access:
+
+```yaml
+jobs:
+  build:
+    # All steps in this job get content and site volumes
+    volumes:
+      - content
+      - site
+
+    sequence:
+      - name: Build Hugo site
+        image: hugomods/hugo:latest
+        cmd: hugo --source /src/site --contentDir /src/content --destination /output --minify
+        # This step also needs the dist volume for output
+        volumes:
+          - dist
+```
+
+Job-level volumes are inherited by all steps. Steps can add additional volumes they need.
+
+### Overriding mount options per-step
+
+Sometimes you need different mount settings for specific steps. You can override `mountPath` or make a `readwrite` volume read-only:
+
+```yaml
+- name: Verify output
+  image: alpine
+  volumes:
+    # Override mountPath: use /public instead of default /output
+    # Also mount as read-only for safety (even though dist is defined as readwrite)
+    - name: dist
+      mountPath: /public
+      readonly: true
+  cmd: |
+    echo "Generated files:"
+    find /public -type f | head -20
+```
+
+This is useful when:
+- Different tools expect files at different paths
+- You want to prevent accidental writes in verification steps
+- You're passing volumes to third-party images with specific path requirements
+
+### Shorthand syntax
+
+For simple cases, ocw supports shorthand:
+
+```yaml
+# Single volume - string instead of array
+clean:
+  volumes: dist
+  image: alpine
+  cmd: rm -rf /output/*
+
+# Equivalent to:
+clean:
+  volumes:
+    - name: dist
+```
+
+Run it with:
+
+```bash
+ocw dev     # Start dev server at http://localhost:1313
+ocw build   # Build static site to ./website/dist
+ocw deploy  # Push to S3
 ```

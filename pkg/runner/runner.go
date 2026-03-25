@@ -95,6 +95,20 @@ type Runner struct {
 	reloader *Reloader
 	// builtImageConfigs stores build configs for rebuilds in watch mode
 	builtImageConfigs map[string]*schema.BuildConfig
+
+	// resolvedVolumes stores resolved workflow volumes
+	resolvedVolumes map[string]*ResolvedVolume
+
+	// currentJobVolumes stores the current job's volume references during execution
+	currentJobVolumes schema.VolumeRefs
+}
+
+// ResolvedVolume contains the resolved paths for a workflow volume
+type ResolvedVolume struct {
+	Name      string
+	HostPath  string            // Absolute path on host
+	Mode      schema.VolumeMode // "ro" or "rw"
+	MountPath string            // Default mount path (empty = /volumes/<name>)
 }
 
 // NewRunner creates a new workflow runner
@@ -532,6 +546,11 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 		return fmt.Errorf("failed to create network: %w", err)
 	}
 
+	// Resolve workflow volumes
+	if err := r.resolveVolumes(ocw.Volumes); err != nil {
+		return fmt.Errorf("failed to resolve volumes: %w", err)
+	}
+
 	start := time.Now()
 
 	var err error
@@ -614,6 +633,14 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 	if err := r.createJobNetwork(ctx, jobName); err != nil {
 		return fmt.Errorf("failed to create network: %w", err)
 	}
+
+	// Resolve workflow volumes
+	if err := r.resolveVolumes(ocw.Volumes); err != nil {
+		return fmt.Errorf("failed to resolve volumes: %w", err)
+	}
+
+	// Store job-level volumes for step resolution
+	r.currentJobVolumes = job.Volumes
 
 	// Apply job-level watch config to background steps that don't have explicit watch
 	if job.Watch != nil && job.Watch.IsEnabled() {
@@ -1015,24 +1042,31 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		env["OUTPUTS"] = fmt.Sprintf("/workflow/.ocw-outputs/%s", stepID)
 	}
 
+	// Resolve volume mounts for this step
+	volumeMounts, err := r.resolveStepVolumes(step.Volumes, r.currentJobVolumes)
+	if err != nil {
+		return fmt.Errorf("failed to resolve volumes: %w", err)
+	}
+
 	// Run the container
 	opts := RunContainerOptions{
 		Name:         containerName,
 		Hostname:     hostname,
 		Network:      r.networkName,
-		Image:        image,      // Use interpolated image
-		Cmd:          cmd,        // Use interpolated cmd
-		Args:         args,       // Use interpolated args
-		Entrypoint:   entrypoint, // Use interpolated entrypoint
-		Env:          env,        // Already interpolated + OCW_OUTPUT
+		Image:        image,
+		Cmd:          cmd,
+		Args:         args,
+		Entrypoint:   entrypoint,
+		Env:          env,
 		WorkDir:      workDir,
 		WorkflowDir:  r.WorkflowDir,
+		VolumeMounts: volumeMounts,
 		TTY:          step.TTY,
 		Remove:       !step.Background,
 		Background:   step.Background,
 		HealthCheck:  healthCheck,
 		PortMappings: portMappings,
-		Force:        r.force, // Pass force flag
+		Force:        r.force,
 	}
 
 	if err := r.podman.RunContainer(ctx, opts); err != nil {
@@ -1057,6 +1091,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 			RunStep:       step,
 			BuildStepID:   referencedBuildStepID,
 			PortMappings:  portMappings,
+			VolumeMounts:  volumeMounts, // Pass volume mounts for path translation
 		}
 
 		if err := r.reloader.RegisterContainer(wc); err != nil {
@@ -1141,15 +1176,22 @@ func (r *Runner) runBuildStep(ctx context.Context, step *schema.BuildStep) error
 		return fmt.Errorf("failed to interpolate tags: %w", err)
 	}
 
+	// Resolve volume mounts for this step
+	volumeMounts, err := r.resolveStepVolumes(step.Volumes, r.currentJobVolumes)
+	if err != nil {
+		return fmt.Errorf("failed to resolve volumes: %w", err)
+	}
+
 	// Build the image
 	opts := BuildImageOptions{
-		ImageName:   imageName,
-		Context:     context,
-		Dockerfile:  dockerfile,
-		BuildArgs:   buildArgs,
-		Target:      target,
-		Tags:        tags,
-		WorkflowDir: r.WorkflowDir,
+		ImageName:    imageName,
+		Context:      context,
+		Dockerfile:   dockerfile,
+		BuildArgs:    buildArgs,
+		Target:       target,
+		Tags:         tags,
+		WorkflowDir:  r.WorkflowDir,
+		VolumeMounts: volumeMounts,
 	}
 
 	builtImage, err := r.podman.BuildImage(ctx, opts)
@@ -1294,4 +1336,138 @@ func parseDuration(s string, defaultVal time.Duration) time.Duration {
 		return defaultVal
 	}
 	return d
+}
+
+// resolveVolumes resolves volume paths from the workflow schema
+func (r *Runner) resolveVolumes(volumes schema.Volumes) error {
+	r.resolvedVolumes = make(map[string]*ResolvedVolume)
+
+	for name, vol := range volumes {
+		hostPath := vol.Path
+
+		// Expand ~ to home directory
+		if strings.HasPrefix(hostPath, "~/") {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("volume %q: failed to get home directory: %w", name, err)
+			}
+			hostPath = filepath.Join(homeDir, hostPath[2:])
+		}
+
+		if !filepath.IsAbs(hostPath) {
+			hostPath = filepath.Join(r.WorkflowDir, vol.Path)
+		}
+
+		absPath, err := filepath.Abs(hostPath)
+		if err != nil {
+			return fmt.Errorf("volume %q: %w", name, err)
+		}
+
+		// Verify path exists
+		if _, err := os.Stat(absPath); err != nil {
+			return fmt.Errorf("volume %q path does not exist: %s", name, absPath)
+		}
+
+		mode := vol.Mode
+		if mode == "" {
+			mode = schema.VolumeModeReadOnly
+		}
+
+		r.resolvedVolumes[name] = &ResolvedVolume{
+			Name:      name,
+			HostPath:  absPath,
+			Mode:      mode,
+			MountPath: vol.MountPath,
+		}
+	}
+
+	return nil
+}
+
+// VolumeMount represents a resolved volume mount
+type VolumeMount struct {
+	HostPath      string
+	ContainerPath string
+	ReadOnly      bool
+}
+
+// resolveStepVolumes resolves volume references for a step
+// Returns a list of mount specifications for podman
+func (r *Runner) resolveStepVolumes(stepVolumes, jobVolumes schema.VolumeRefs) ([]VolumeMount, error) {
+	var mounts []VolumeMount
+	seen := make(map[string]bool)
+
+	// Process step-level volumes (highest priority)
+	for _, ref := range stepVolumes {
+		if seen[ref.Name] {
+			continue
+		}
+		seen[ref.Name] = true
+
+		mount, err := r.resolveVolumeRef(ref)
+		if err != nil {
+			return nil, err
+		}
+		mounts = append(mounts, mount)
+	}
+
+	// Process job-level volumes
+	for _, ref := range jobVolumes {
+		if seen[ref.Name] {
+			continue
+		}
+		seen[ref.Name] = true
+
+		mount, err := r.resolveVolumeRef(ref)
+		if err != nil {
+			return nil, err
+		}
+		mounts = append(mounts, mount)
+	}
+
+	return mounts, nil
+}
+
+// resolveVolumeRef resolves a single volume reference
+func (r *Runner) resolveVolumeRef(ref schema.VolumeRef) (VolumeMount, error) {
+	vol, ok := r.resolvedVolumes[ref.Name]
+	if !ok {
+		return VolumeMount{}, fmt.Errorf("volume %q not defined", ref.Name)
+	}
+
+	// Determine mount path (ref override > volume default > /volumes/<name>)
+	mountPath := ref.MountPath
+	if mountPath == "" {
+		mountPath = vol.MountPath
+	}
+	if mountPath == "" {
+		mountPath = "/volumes/" + ref.Name
+	}
+
+	// Determine if mount should be read-only
+	// Start with volume's mode
+	readOnly := vol.Mode == schema.VolumeModeReadOnly || vol.Mode == ""
+
+	// ref.ReadOnly can only make it MORE restrictive (rw -> ro)
+	// It cannot make a ro volume writable
+	if ref.ReadOnly != nil {
+		if *ref.ReadOnly {
+			// Always allowed: making mount read-only
+			readOnly = true
+		} else if readOnly {
+			// ERROR: Cannot make a read-only volume writable
+			return VolumeMount{}, fmt.Errorf(
+				"volume %q is read-only and cannot be mounted as read-write; "+
+					"steps can only make volumes more restrictive, not less",
+				ref.Name,
+			)
+		}
+		// If ref.ReadOnly is false and volume is rw, readOnly stays false
+	}
+
+	return VolumeMount{
+		HostPath:      vol.HostPath,
+		ContainerPath: mountPath,
+		ReadOnly:      readOnly,
+	}, nil
 }
