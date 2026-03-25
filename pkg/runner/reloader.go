@@ -406,21 +406,23 @@ func (r *Reloader) justReload(ctx context.Context, wc *WatchedContainer) error {
 	}
 
 	opts := RunContainerOptions{
-		Name:         wc.ContainerName,
-		Hostname:     hostname,
-		Network:      r.runner.networkName,
-		Image:        wc.Image,
-		Cmd:          cmd,
-		Args:         args,
-		Entrypoint:   entrypoint,
-		Env:          env,
-		WorkDir:      workDir,
-		WorkflowDir:  r.runner.WorkflowDir,
-		VolumeMounts: wc.VolumeMounts, // Include volume mounts from watched container
-		TTY:          wc.RunStep.TTY,
-		Remove:       false,
-		Background:   true,
-		Force:        true,
+		Name:          wc.ContainerName,
+		Hostname:      hostname,
+		Network:       r.runner.networkName,
+		Image:         wc.Image,
+		Cmd:           cmd,
+		Args:          args,
+		Entrypoint:    entrypoint,
+		Env:           env,
+		WorkDir:       workDir,
+		WorkflowDir:   r.runner.WorkflowDir,
+		VolumeMounts:  wc.VolumeMounts,
+		TTY:           wc.RunStep.TTY,
+		Remove:        false,
+		Background:    true,
+		Force:         true,
+		OverlayVolume: r.runner.getCurrentOverlayVolume(),
+		SecurityOpts:  []string{"label=disable"},
 	}
 
 	// Process port mappings - reuse existing ports if available

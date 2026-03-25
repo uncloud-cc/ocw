@@ -6,7 +6,7 @@ ocw workflows essentially do just two things: **Build containers** and **run con
 
 ocw is also designed for security with _immutable workspaces_, _outgoing network filters_, is configured to be _jailbreak-proof_, runs _rootless_ and it built on top of [Podman](https://podman.io/) which is an open-source container runtime built with security in mind.
 
-> **At the moment ocw is still in early stages** and many of the security features aren't implemented yet! Checkout the [ocw roadmap](https://github.com/orgs/opencontainerworkflow/projects/1) for details.
+> **At the moment ocw is still in early stages** and the outgoing network filters aren't implemented yet 👉🏻 See [SECURITY.md](../SECURITY.md) for details
 
 > 📚 **Want to follow along?** All example files from this tutorial are available in the [`examples/`](../examples/) directory with numbered prefixes (1_, 2_, etc.) to help you progress gradually. Clone the repo to get started:
 > ```bash

@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
+	"github.com/uncloud-cc/ocw/pkg/overlay"
+	"github.com/uncloud-cc/ocw/pkg/runner/security"
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
@@ -96,6 +97,11 @@ type Runner struct {
 	// builtImageConfigs stores build configs for rebuilds in watch mode
 	builtImageConfigs map[string]*schema.BuildConfig
 
+	// overlayManager manages immutable filesystem overlays
+	overlayManager *overlay.Manager
+	// useOverlay indicates whether overlay volumes are active
+	useOverlay bool
+
 	// resolvedVolumes stores resolved workflow volumes
 	resolvedVolumes map[string]*ResolvedVolume
 
@@ -154,6 +160,42 @@ func (r *Runner) initReloader() {
 	if r.reloader == nil {
 		r.reloader = NewReloader(r)
 	}
+}
+
+// initOverlay initializes the overlay manager for immutable filesystem
+func (r *Runner) initOverlay() error {
+	// Create overlay manager
+	var err error
+	r.overlayManager, err = overlay.NewManager(r.runID, r.WorkflowDir)
+	if err != nil {
+		return fmt.Errorf("failed to initialize overlay manager: %w", err)
+	}
+
+	r.useOverlay = true
+	r.Output("  %s %s\n", r.styles.Label("Filesystem:"), r.styles.Value("immutable (overlay)"))
+	return nil
+}
+
+// cleanupOverlay cleans up overlay resources
+func (r *Runner) cleanupOverlay() {
+	if r.overlayManager != nil {
+		if err := r.overlayManager.Cleanup(); err != nil {
+			r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to cleanup overlay: %v", err)))
+		}
+		r.overlayManager = nil
+		r.useOverlay = false
+	}
+}
+
+// getCurrentOverlayVolume returns the current overlay volume name for reloads
+func (r *Runner) getCurrentOverlayVolume() string {
+	if r.overlayManager != nil && r.useOverlay {
+		// Return the current step's volume name
+		if r.overlayManager.CurrentStep != "" {
+			return fmt.Sprintf("ocw-%s-%s", r.overlayManager.RunID, r.overlayManager.CurrentStep)
+		}
+	}
+	return ""
 }
 
 // loadDotEnv loads .env file from the workflow directory and populates
@@ -456,25 +498,21 @@ func (r *Runner) getStepOutputPath(stepID string) string {
 	return filepath.Join(r.outputsDir(), stepID)
 }
 
-// parseStepOutputs reads the output file for a step and registers the outputs
+// parseStepOutputs reads the output file for a step from the overlay and registers the outputs
 func (r *Runner) parseStepOutputs(stepID string) error {
-	outputPath := r.getStepOutputPath(stepID)
-
-	file, err := os.Open(outputPath)
+	// Read outputs from the overlay filesystem
+	filePath := filepath.Join(".ocw-outputs", stepID)
+	content, err := r.overlayManager.ReadStepOutput(stepID, filePath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			// No outputs file - that's fine, step just didn't write any outputs
-			return nil
-		}
-		return fmt.Errorf("failed to open outputs file: %w", err)
+		// No outputs file - that's fine, step just didn't write any outputs
+		return nil
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
+	lines := strings.Split(string(content), "\n")
 	lineNum := 0
-	for scanner.Scan() {
+	for _, line := range lines {
 		lineNum++
-		line := strings.TrimSpace(scanner.Text())
+		line = strings.TrimSpace(line)
 
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -500,10 +538,6 @@ func (r *Runner) parseStepOutputs(stepID string) error {
 		r.Output("  %s %s%s%s\n", r.styles.Dim("Output:"), r.styles.OutputKey(key), r.styles.Dim("="), r.styles.OutputValue(value))
 	}
 
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading outputs file: %w", err)
-	}
-
 	return nil
 }
 
@@ -512,9 +546,15 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 	// Generate unique run ID for this workflow execution (enables parallel runs)
 	r.runID = gonanoid.Must(5)
 
+	// Setup seccomp profile for jailbreak prevention
+	if _, err := security.SetupSeccompProfile(); err != nil {
+		return fmt.Errorf("failed to setup seccomp profile: %w", err)
+	}
+	defer security.CleanupSeccompProfile()
+
 	// Ensure background containers and outputs are cleaned up when done
 	defer r.cleanupBackgroundContainers()
-	defer r.cleanupOutputsDir()
+	defer r.cleanupOverlay()
 
 	// Print styled job header
 	r.Output(r.styles.JobBox(string(ocw.Name), "", string(ocw.Description)))
@@ -532,11 +572,6 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 		ID:          string(ocw.ID),
 	}
 
-	// Create outputs directory for step outputs
-	if err := r.ensureOutputsDir(); err != nil {
-		return fmt.Errorf("failed to create outputs directory: %w", err)
-	}
-
 	// Create a network for this workflow (enables container-to-container communication)
 	workflowName := sanitizeName(ocw.Name)
 	if workflowName == "" {
@@ -549,6 +584,11 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 	// Resolve workflow volumes
 	if err := r.resolveVolumes(ocw.Volumes); err != nil {
 		return fmt.Errorf("failed to resolve volumes: %w", err)
+	}
+
+	// Initialize overlay filesystem if enabled
+	if err := r.initOverlay(); err != nil {
+		return err
 	}
 
 	start := time.Now()
@@ -591,7 +631,7 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 
 	// Ensure background containers and outputs are cleaned up when done
 	defer r.cleanupBackgroundContainers()
-	defer r.cleanupOutputsDir()
+	defer r.cleanupOverlay()
 
 	job := ocw.GetJob(jobName)
 	if job == nil {
@@ -624,11 +664,6 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 		ID:          jobName,
 	}
 
-	// Create outputs directory for step outputs
-	if err := r.ensureOutputsDir(); err != nil {
-		return fmt.Errorf("failed to create outputs directory: %w", err)
-	}
-
 	// Create a network for this job (enables container-to-container communication)
 	if err := r.createJobNetwork(ctx, jobName); err != nil {
 		return fmt.Errorf("failed to create network: %w", err)
@@ -637,6 +672,11 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 	// Resolve workflow volumes
 	if err := r.resolveVolumes(ocw.Volumes); err != nil {
 		return fmt.Errorf("failed to resolve volumes: %w", err)
+	}
+
+	// Initialize overlay filesystem if enabled
+	if err := r.initOverlay(); err != nil {
+		return err
 	}
 
 	// Store job-level volumes for step resolution
@@ -1048,29 +1088,55 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		return fmt.Errorf("failed to resolve volumes: %w", err)
 	}
 
+	// Prepare overlay volume if enabled
+	var overlayVolume string
+	var securityOpts []string
+	if r.useOverlay && r.overlayManager != nil {
+		stepIDForOverlay := stepID
+		if stepIDForOverlay == "" {
+			stepIDForOverlay = fmt.Sprintf("step-%d", time.Now().UnixNano())
+		}
+
+		volumeName, err := r.overlayManager.PrepareStepOverlay(stepIDForOverlay)
+		if err != nil {
+			return fmt.Errorf("failed to prepare overlay volume: %w", err)
+		}
+		overlayVolume = volumeName
+		securityOpts = []string{"label=disable"} // Required for overlay access
+	}
+
 	// Run the container
 	opts := RunContainerOptions{
-		Name:         containerName,
-		Hostname:     hostname,
-		Network:      r.networkName,
-		Image:        image,
-		Cmd:          cmd,
-		Args:         args,
-		Entrypoint:   entrypoint,
-		Env:          env,
-		WorkDir:      workDir,
-		WorkflowDir:  r.WorkflowDir,
-		VolumeMounts: volumeMounts,
-		TTY:          step.TTY,
-		Remove:       !step.Background,
-		Background:   step.Background,
-		HealthCheck:  healthCheck,
-		PortMappings: portMappings,
-		Force:        r.force,
+		Name:          containerName,
+		Hostname:      hostname,
+		Network:       r.networkName,
+		Image:         image,
+		Cmd:           cmd,
+		Args:          args,
+		Entrypoint:    entrypoint,
+		Env:           env,
+		WorkDir:       workDir,
+		WorkflowDir:   r.WorkflowDir,
+		VolumeMounts:  volumeMounts,
+		TTY:           step.TTY,
+		Remove:        !step.Background,
+		Background:    step.Background,
+		HealthCheck:   healthCheck,
+		PortMappings:  portMappings,
+		Force:         r.force,
+		OverlayVolume: overlayVolume,
+		SecurityOpts:  securityOpts,
 	}
 
 	if err := r.podman.RunContainer(ctx, opts); err != nil {
 		return fmt.Errorf("container execution failed: %w", err)
+	}
+
+	// After step completes successfully, mark overlay as complete
+	if r.useOverlay && r.overlayManager != nil && !step.Background {
+		if err := r.overlayManager.CompleteStep(); err != nil {
+			r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to complete overlay step: %v", err)))
+		}
 	}
 
 	// Track background containers for cleanup

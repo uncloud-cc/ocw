@@ -1,0 +1,21 @@
+schemaVersion: "0.1.0"
+name: Immutable Filesystem Test
+
+sequence:
+  - name: Create file
+    image: alpine:latest
+    cmd: |
+      echo "=== STEP 1: Creating file inside container ==="
+      echo "Hello from container" > /workflow/from-container.txt
+      echo "✓ File created: /workflow/from-container.txt"
+      echo "✓ Content: $(cat /workflow/from-container.txt)"
+      
+  - name: Next step sees it
+    image: alpine:latest
+    cmd: |
+      echo "=== STEP 2: Next container sees previous file ==="
+      echo "✓ Found file: /workflow/from-container.txt"
+      echo "✓ Content: $(cat /workflow/from-container.txt)"
+      echo ""
+      echo "=== PROOF: File exists across steps (cascading overlay) ==="
+      ls -la /workflow/from-container.txt

@@ -1,6 +1,6 @@
 # Open Container Workflow (ocw)
 
-Container-native workflows for local development & CI/CD.
+Zero-trust container-native workflows for local development & CI/CD.
 
 ## Example
 ```javascript
@@ -42,6 +42,13 @@ Check if it worked by running `ocw --help`
 - Go through the [basics tutorial](./tutorials/basics.md)
 - Check out advanced features in the [advanced tutorial](./tutorials/advanced.md)
 - Or check out the [examples](./examples/)
+
+## Security
+ocw is built with security in mind to guard against supply-chain attacks.
+
+Your local workflows & CI/CD pipelines are protected through a **zero-trust design** with **rootless container execution**, **network isolation** and an **immutable file-system** built in.
+
+See [SECURITY.md](/SECURITY.md) for details.
 
 ## Feedback
 

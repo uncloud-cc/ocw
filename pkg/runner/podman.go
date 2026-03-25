@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/uncloud-cc/ocw/pkg/runner/security"
 )
 
 // prefixWriter wraps a writer and prefixes each line with a styled prefix
@@ -236,6 +238,11 @@ type RunContainerOptions struct {
 	HealthCheck  *HealthCheckConfig // Health check for background containers
 	PortMappings []PortMapping      // Ports to expose from container to host
 	Force        bool               // Force remove existing container with same name
+	// OverlayVolume is the name of an overlay volume to mount at /workflow
+	// If set, WorkflowDir is ignored
+	OverlayVolume string
+	// SecurityOpts are additional security options (e.g., "label=disable")
+	SecurityOpts []string
 }
 
 // RunContainer runs a container and waits for it to complete
@@ -314,8 +321,32 @@ func (p *Podman) RunContainer(ctx context.Context, opts RunContainerOptions) err
 		args = append(args, "-w", opts.WorkDir)
 	}
 
-	// Mount workflow directory as /workflow (read-write)
-	if opts.WorkflowDir != "" {
+	// Add security options (required for overlay volumes)
+	for _, opt := range opts.SecurityOpts {
+		args = append(args, "--security-opt", opt)
+	}
+
+	// Jailbreak prevention: Drop all capabilities except essentials
+	args = append(args, "--cap-drop=ALL")
+	args = append(args, "--cap-add=CHOWN")
+	args = append(args, "--cap-add=SETGID")
+	args = append(args, "--cap-add=SETUID")
+
+	// Jailbreak prevention: Prevent privilege escalation via SUID
+	args = append(args, "--security-opt", "no-new-privileges:true")
+
+	// Jailbreak prevention: Restrict dangerous syscalls via seccomp
+	seccompPath := security.GetSeccompProfilePath()
+	if _, err := os.Stat(seccompPath); err == nil {
+		args = append(args, "--security-opt", fmt.Sprintf("seccomp=%s", seccompPath))
+	}
+
+	// Mount workflow directory - either via overlay volume or direct mount
+	if opts.OverlayVolume != "" {
+		// Use overlay volume for immutable filesystem
+		args = append(args, "-v", fmt.Sprintf("%s:/workflow", opts.OverlayVolume))
+	} else if opts.WorkflowDir != "" {
+		// Direct mount (legacy behavior)
 		absPath, err := filepath.Abs(opts.WorkflowDir)
 		if err != nil {
 			return fmt.Errorf("failed to get absolute path for workflow dir: %w", err)
