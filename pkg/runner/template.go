@@ -124,6 +124,19 @@ func (tc *TemplateContext) evaluateExpression(expr string) (string, error) {
 		}
 		return "", fmt.Errorf("input not found: %s", inputName)
 
+	case "env":
+		// {{ env.<name> }} - access environment variables
+		envName := parts[1]
+		// First check the template context (workflow-level env + .env file)
+		if value, ok := tc.Env[envName]; ok {
+			return value, nil
+		}
+		// Fallback to OS environment variables
+		if value := os.Getenv(envName); value != "" {
+			return value, nil
+		}
+		return "", fmt.Errorf("env variable not found: %s", envName)
+
 	case "workflow":
 		// {{ workflow.<field> }}
 		field := parts[1]

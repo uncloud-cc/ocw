@@ -4,6 +4,8 @@ sequence:
     id: redis # This becomes the hostname
     image: redis:7-alpine
     background: true
+    # Redis entrypoint tries to chown files in cwd; use /data to avoid /workflow (immutable)
+    workdir: /data
 
   - name: Use Redis
     image: redis:7-alpine

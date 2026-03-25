@@ -82,9 +82,11 @@ func (m *Manager) execInVM(cmds ...string) error {
 
 // PrepareStepOverlay creates overlay volume for the next step
 // Returns the volume name to use with podman run -v
-func (m *Manager) PrepareStepOverlay(stepID string) (string, error) {
+// If preservePrevious is true, the previous step's volume is kept (for background containers)
+func (m *Manager) PrepareStepOverlay(stepID string, preservePrevious bool) (string, error) {
 	// Clean up previous step's volume (if any) - the upperdir persists
-	if m.CurrentStep != "" {
+	// Skip cleanup if the previous step was a background container (still running)
+	if m.CurrentStep != "" && !preservePrevious {
 		oldVolume := fmt.Sprintf("ocw-%s-%s", m.RunID, m.CurrentStep)
 		exec.Command("podman", "volume", "rm", "-f", oldVolume).Run()
 	}

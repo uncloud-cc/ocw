@@ -101,6 +101,9 @@ type Runner struct {
 	overlayManager *overlay.Manager
 	// useOverlay indicates whether overlay volumes are active
 	useOverlay bool
+	// previousStepWasBackground tracks if the last step was a background container
+	// Used to preserve overlay volumes for running background containers
+	previousStepWasBackground bool
 
 	// resolvedVolumes stores resolved workflow volumes
 	resolvedVolumes map[string]*ResolvedVolume
@@ -1097,7 +1100,8 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 			stepIDForOverlay = fmt.Sprintf("step-%d", time.Now().UnixNano())
 		}
 
-		volumeName, err := r.overlayManager.PrepareStepOverlay(stepIDForOverlay)
+		// Preserve previous step's volume if it was a background container (still running)
+		volumeName, err := r.overlayManager.PrepareStepOverlay(stepIDForOverlay, r.previousStepWasBackground)
 		if err != nil {
 			return fmt.Errorf("failed to prepare overlay volume: %w", err)
 		}
@@ -1178,6 +1182,10 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 			r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to parse step outputs: %v", err)))
 		}
 	}
+
+	// Track whether this step was a background container for overlay volume management
+	// The next step should NOT remove this step's overlay volume if it's still running
+	r.previousStepWasBackground = step.Background
 
 	r.Output(r.styles.StepComplete(name, true))
 	return nil
@@ -1278,6 +1286,9 @@ func (r *Runner) runBuildStep(ctx context.Context, step *schema.BuildStep) error
 		r.builtImageConfigs[string(step.ID)] = &step.Build
 		r.builtImagesMu.Unlock()
 	}
+
+	// Build steps are never background, so next step can clean up previous overlay
+	r.previousStepWasBackground = false
 
 	r.Output(r.styles.StepComplete(name, true))
 	return nil
@@ -1429,14 +1440,23 @@ func (r *Runner) resolveVolumes(volumes schema.Volumes) error {
 			return fmt.Errorf("volume %q: %w", name, err)
 		}
 
-		// Verify path exists
-		if _, err := os.Stat(absPath); err != nil {
-			return fmt.Errorf("volume %q path does not exist: %s", name, absPath)
-		}
-
+		// Determine mode (default to readonly)
 		mode := vol.Mode
 		if mode == "" {
 			mode = schema.VolumeModeReadOnly
+		}
+
+		// Check if path exists
+		if _, err := os.Stat(absPath); err != nil {
+			// For readwrite volumes, auto-create the directory
+			if mode == schema.VolumeModeReadWrite {
+				if err := os.MkdirAll(absPath, 0755); err != nil {
+					return fmt.Errorf("volume %q: failed to create directory %s: %w", name, absPath, err)
+				}
+			} else {
+				// For readonly volumes, the path must exist
+				return fmt.Errorf("volume %q path does not exist: %s", name, absPath)
+			}
 		}
 
 		r.resolvedVolumes[name] = &ResolvedVolume{
