@@ -2,7 +2,7 @@
 
 This is the second tutorial where we dive into advanced features of ocw workflows. Check-out the [basics tutorial](./basics.md) to get an overview of ocw.
 
-Make sure you have the [ocw cli](./basics.md#setup) and [Podman](https://podman.io/docs/installation) installed to follow along.
+Make sure you have the [ocw cli](./basics.md#setup) and [Docker](https://docs.docker.com/get-docker/) installed to follow along.
 
 > 📚 **Want to follow along?** All example files from this tutorial are available in the [`examples/`](../examples/) directory with numbered prefixes (4_, 5_, etc.) to help you follow along progressively. Clone the repo to get started:
 > ```bash

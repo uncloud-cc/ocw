@@ -4,10 +4,6 @@ ocw is a simple to use workflow engine that lets you build workflows out of cont
 
 ocw workflows essentially do just two things: **Build containers** and **run containers** - that's pretty much it. Everything else around it is just to make your life easier.
 
-ocw is also designed for security with _immutable workspaces_, _outgoing network filters_, is configured to be _jailbreak-proof_, runs _rootless_ and it built on top of [Podman](https://podman.io/) which is an open-source container runtime built with security in mind.
-
-> **At the moment ocw is still in early stages** and many of the security features aren't implemented yet! Checkout the [ocw roadmap](https://github.com/orgs/opencontainerworkflow/projects/1) for details.
-
 > 📚 **Want to follow along?** All example files from this tutorial are available in the [`examples/`](../examples/) directory with numbered prefixes (1_, 2_, etc.) to help you progress gradually. Clone the repo to get started:
 > ```bash
 > git clone https://github.com/uncloud-cc/ocw.git
@@ -18,7 +14,7 @@ ocw is also designed for security with _immutable workspaces_, _outgoing network
 
 Before we jump in, you need to install three things on your local machine to get started:
 
-- [Podman](https://podman.io/docs/installation) it's an open-source container runtime that's secure by design
+- [Docker](https://docs.docker.com/get-docker/) it's an open-source container runtime that's secure by design
 - [Go](https://go.dev/dl/) for being able to run the `ocw cli`
 - [ocw cli](../README.md#install) for running ocw workflows → Just run `go install github.com/uncloud-cc/ocw/cmd`
 
@@ -62,18 +58,18 @@ Workflows can run steps as a `sequence`, in `parallel` or based on conditions us
 
 But we're getting ahead of ourselves - let's build a container next!
 
-> **Example not working?** Double check that you added podman & go to your `$PATH` by checking your `~/.bashrc` or `~/.zshrc` for options similar to this:
+> **Example not working?** Double check that you added docker & go to your `$PATH` by checking your `~/.bashrc` or `~/.zshrc` for options similar to this:
 >
 > ```bash
 > # Your ~/.bashrc or ~/.zshrc should contain something like this:
-> # Podman
-> export PATH="/opt/podman/bin:$PATH"
+> # Docker
+> export PATH="/opt/docker/bin:$PATH"
 >
 > # Go
 > export PATH="$PATH:$HOME/go/bin"
 > ```
 >
-> You might have to run `source ~/.bashrc` or `source ~/.zshrc` again or restart your terminal. You know they are setup correctly when `go version` and `podman version` output correct values.
+> You might have to run `source ~/.bashrc` or `source ~/.zshrc` again or restart your terminal. You know they are setup correctly when `go version` and `docker version` output correct values.
 
 ## Building a container
 
@@ -106,7 +102,7 @@ Successfully tagged localhost/my-first-ocw-container:latest
 You can now run the container locally (we'll run it by hand first and as part of a ocw workflow next!):
 
 ```bash
-podman run --rm my-first-ocw-container
+docker run --rm my-first-ocw-container
 # Hello World ✨
 ```
 

@@ -1,2 +1,4 @@
 ocw
 !/cmd/ocw
+# Added by goreleaser init:
+dist/

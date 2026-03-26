@@ -73,8 +73,8 @@ func (pw *prefixWriter) Flush() {
 	}
 }
 
-// Podman wraps podman CLI commands
-type Podman struct {
+// Docker wraps docker CLI commands
+type Docker struct {
 	// Output function for logging
 	Output func(format string, args ...any)
 	// styles provides styled output formatting
@@ -89,11 +89,10 @@ type NetworkCreateOptions struct {
 	Driver string // Network driver (default: bridge)
 }
 
-// CreateNetwork creates a Podman network
-func (p *Podman) CreateNetwork(ctx context.Context, opts NetworkCreateOptions) error {
+// CreateNetwork creates a Docker network
+func (d *Docker) CreateNetwork(ctx context.Context, opts NetworkCreateOptions) error {
 	// Check if network already exists
-	checkCmd := exec.CommandContext(ctx, "podman", "network", "exists", opts.Name)
-	if err := checkCmd.Run(); err == nil {
+	if d.NetworkExists(ctx, opts.Name) {
 		// Network exists, silently continue
 		return nil
 	}
@@ -105,7 +104,7 @@ func (p *Podman) CreateNetwork(ctx context.Context, opts NetworkCreateOptions) e
 
 	args := []string{"network", "create", "--driver", driver, opts.Name}
 
-	cmd := exec.CommandContext(ctx, "podman", args...)
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	// Suppress network creation output - not interesting for users
 	cmd.Stdout = nil
 	cmd.Stderr = os.Stderr
@@ -117,15 +116,15 @@ func (p *Podman) CreateNetwork(ctx context.Context, opts NetworkCreateOptions) e
 	return nil
 }
 
-// RemoveNetwork removes a Podman network
-func (p *Podman) RemoveNetwork(ctx context.Context, name string) error {
-	cmd := exec.CommandContext(ctx, "podman", "network", "rm", "-f", name)
+// RemoveNetwork removes a Docker network
+func (d *Docker) RemoveNetwork(ctx context.Context, name string) error {
+	cmd := exec.CommandContext(ctx, "docker", "network", "rm", name)
 	return cmd.Run()
 }
 
 // NetworkExists checks if a network exists
-func (p *Podman) NetworkExists(ctx context.Context, name string) bool {
-	cmd := exec.CommandContext(ctx, "podman", "network", "exists", name)
+func (d *Docker) NetworkExists(ctx context.Context, name string) bool {
+	cmd := exec.CommandContext(ctx, "docker", "network", "inspect", name)
 	return cmd.Run() == nil
 }
 
@@ -167,33 +166,32 @@ func FindAvailablePort(preferredPort int) (int, error) {
 	return addr.Port, nil
 }
 
-// NewPodman creates a new Podman wrapper
-func NewPodman(output func(format string, args ...any), styles *Styles, secrets []string) *Podman {
-	return &Podman{Output: output, styles: styles, secrets: secrets}
+// NewDocker creates a new Docker wrapper
+func NewDocker(output func(format string, args ...any), styles *Styles, secrets []string) *Docker {
+	return &Docker{Output: output, styles: styles, secrets: secrets}
 }
 
 // SetSecrets updates the secrets to mask in output
-func (p *Podman) SetSecrets(secrets []string) {
-	p.secrets = secrets
+func (d *Docker) SetSecrets(secrets []string) {
+	d.secrets = secrets
 }
 
 // PullImage pulls an image if not present locally
-func (p *Podman) PullImage(ctx context.Context, imageName string) error {
+func (d *Docker) PullImage(ctx context.Context, imageName string) error {
 	// Check if image exists locally
-	checkCmd := exec.CommandContext(ctx, "podman", "image", "exists", imageName)
-	if err := checkCmd.Run(); err == nil {
-		p.Output("  %s %s\n", p.styles.Dim("Image exists:"), p.styles.Value(imageName))
+	if d.ImageExists(ctx, imageName) {
+		d.Output("  %s %s\n", d.styles.Dim("Image exists:"), d.styles.Value(imageName))
 		return nil
 	}
 
-	p.Output("  %s %s\n", p.styles.Info("Pulling:"), p.styles.Value(imageName))
+	d.Output("  %s %s\n", d.styles.Info("Pulling:"), d.styles.Value(imageName))
 
 	// Create prefixed writers for pull output
-	logPrefix := p.styles.LogPrefix()
-	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, p.secrets)
-	stderrWriter := newPrefixWriter(os.Stderr, logPrefix, p.secrets)
+	logPrefix := d.styles.LogPrefix()
+	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, d.secrets)
+	stderrWriter := newPrefixWriter(os.Stderr, logPrefix, d.secrets)
 
-	cmd := exec.CommandContext(ctx, "podman", "pull", imageName)
+	cmd := exec.CommandContext(ctx, "docker", "pull", imageName)
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 
@@ -221,7 +219,7 @@ type HealthCheckConfig struct {
 type RunContainerOptions struct {
 	Name         string             // Container name (optional, auto-generated if empty)
 	Hostname     string             // Hostname for the container (for DNS resolution in network)
-	Network      string             // Network to connect to (empty = default podman network)
+	Network      string             // Network to connect to (empty = default docker network)
 	Image        string             // Image to run
 	Cmd          string             // Command string (will be passed to shell)
 	Args         []string           // Command arguments (if Cmd is empty)
@@ -239,7 +237,7 @@ type RunContainerOptions struct {
 }
 
 // RunContainer runs a container and waits for it to complete
-func (p *Podman) RunContainer(ctx context.Context, opts RunContainerOptions) error {
+func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) error {
 	args := []string{"run"}
 
 	// For background containers, we don't use --rm (we manage cleanup ourselves)
@@ -255,20 +253,20 @@ func (p *Podman) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	}
 
 	// Handle existing containers
-	if containerName != "" && p.ContainerExists(ctx, containerName) {
+	if containerName != "" && d.ContainerExists(ctx, containerName) {
 		if opts.Force {
 			// Force flag: remove existing container regardless of state
-			if err := p.RemoveExistingContainer(ctx, containerName); err != nil {
+			if err := d.RemoveExistingContainer(ctx, containerName); err != nil {
 				return fmt.Errorf("failed to remove existing container: %w", err)
 			}
-		} else if !p.IsContainerRunning(ctx, containerName) {
+		} else if !d.IsContainerRunning(ctx, containerName) {
 			// Auto-cleanup: remove stopped containers automatically
-			p.Output("  %s\n", p.styles.Dim(fmt.Sprintf("Auto-removing stopped container '%s'...", containerName)))
-			if err := p.RemoveContainer(ctx, containerName); err != nil {
+			d.Output("  %s\n", d.styles.Dim(fmt.Sprintf("Auto-removing stopped container '%s'...", containerName)))
+			if err := d.RemoveContainer(ctx, containerName); err != nil {
 				return fmt.Errorf("failed to remove stopped container: %w", err)
 			}
 		}
-		// If container is running and force is not set, let podman fail with a clear error
+		// If container is running and force is not set, let docker fail with a clear error
 	}
 
 	if containerName != "" {
@@ -351,11 +349,11 @@ func (p *Podman) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	}
 
 	// Create prefixed writers for container output
-	logPrefix := p.styles.LogPrefix()
-	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, p.secrets)
-	stderrWriter := newPrefixWriter(os.Stderr, logPrefix, p.secrets)
+	logPrefix := d.styles.LogPrefix()
+	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, d.secrets)
+	stderrWriter := newPrefixWriter(os.Stderr, logPrefix, d.secrets)
 
-	cmd := exec.CommandContext(ctx, "podman", args...)
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 	if !opts.Background {
@@ -378,33 +376,33 @@ func (p *Podman) RunContainer(ctx context.Context, opts RunContainerOptions) err
 
 	// For background containers, wait for health check if configured
 	if opts.Background && opts.HealthCheck != nil {
-		p.Output("  %s\n", p.styles.Dim("Waiting for health check..."))
-		if err := p.waitForHealthy(ctx, containerName, opts.HealthCheck); err != nil {
+		d.Output("  %s\n", d.styles.Dim("Waiting for health check..."))
+		if err := d.waitForHealthy(ctx, containerName, opts.HealthCheck); err != nil {
 			// Clean up the container if health check fails
-			p.StopContainer(context.Background(), containerName)
-			p.RemoveContainer(context.Background(), containerName)
+			d.StopContainer(context.Background(), containerName)
+			d.RemoveContainer(context.Background(), containerName)
 			return fmt.Errorf("health check failed: %w", err)
 		}
-		p.Output("  %s\n", p.styles.Success("Container healthy"))
+		d.Output("  %s\n", d.styles.Success("Container healthy"))
 	} else if opts.Background {
 		// No health check, just wait a moment for container to start
 		time.Sleep(500 * time.Millisecond)
 
 		// Verify container is still running
-		if !p.IsContainerRunning(ctx, containerName) {
+		if !d.IsContainerRunning(ctx, containerName) {
 			// Get logs to help debug
-			logs, _ := p.GetContainerLogs(ctx, containerName, 20)
-			p.RemoveContainer(context.Background(), containerName)
+			logs, _ := d.GetContainerLogs(ctx, containerName, 20)
+			d.RemoveContainer(context.Background(), containerName)
 			return fmt.Errorf("background container exited immediately. Logs:\n%s", logs)
 		}
-		p.Output("  %s\n", p.styles.Success("Container started"))
+		d.Output("  %s\n", d.styles.Success("Container started"))
 	}
 
 	return nil
 }
 
 // waitForHealthy waits for a container to become healthy
-func (p *Podman) waitForHealthy(ctx context.Context, containerName string, hc *HealthCheckConfig) error {
+func (d *Docker) waitForHealthy(ctx context.Context, containerName string, hc *HealthCheckConfig) error {
 	interval := hc.Interval
 	if interval == 0 {
 		interval = 2 * time.Second
@@ -422,7 +420,7 @@ func (p *Podman) waitForHealthy(ctx context.Context, containerName string, hc *H
 
 	startPeriod := hc.StartPeriod
 	if startPeriod > 0 {
-		p.Output("Waiting %s before starting health checks...\n", startPeriod)
+		d.Output("Waiting %s before starting health checks...\n", startPeriod)
 		select {
 		case <-time.After(startPeriod):
 		case <-ctx.Done():
@@ -438,14 +436,14 @@ func (p *Podman) waitForHealthy(ctx context.Context, containerName string, hc *H
 		}
 
 		// First check if container is still running
-		if !p.IsContainerRunning(ctx, containerName) {
-			logs, _ := p.GetContainerLogs(ctx, containerName, 20)
+		if !d.IsContainerRunning(ctx, containerName) {
+			logs, _ := d.GetContainerLogs(ctx, containerName, 20)
 			return fmt.Errorf("container exited before becoming healthy. Logs:\n%s", logs)
 		}
 
 		// Run health check command inside the container
 		checkCtx, cancel := context.WithTimeout(ctx, timeout)
-		cmd := exec.CommandContext(checkCtx, "podman", "exec", containerName, "/bin/sh", "-c", hc.Cmd)
+		cmd := exec.CommandContext(checkCtx, "docker", "exec", containerName, "/bin/sh", "-c", hc.Cmd)
 		err := cmd.Run()
 		cancel()
 
@@ -453,7 +451,7 @@ func (p *Podman) waitForHealthy(ctx context.Context, containerName string, hc *H
 			return nil // Health check passed
 		}
 
-		p.Output("  %s\n", p.styles.Dim(fmt.Sprintf("Health check %d/%d failed, retrying...", i+1, retries)))
+		d.Output("  %s\n", d.styles.Dim(fmt.Sprintf("Health check %d/%d failed, retrying...", i+1, retries)))
 
 		select {
 		case <-time.After(interval):
@@ -466,8 +464,8 @@ func (p *Podman) waitForHealthy(ctx context.Context, containerName string, hc *H
 }
 
 // IsContainerRunning checks if a container is running
-func (p *Podman) IsContainerRunning(ctx context.Context, containerName string) bool {
-	cmd := exec.CommandContext(ctx, "podman", "inspect", "--format", "{{.State.Running}}", containerName)
+func (d *Docker) IsContainerRunning(ctx context.Context, containerName string) bool {
+	cmd := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{.State.Running}}", containerName)
 	output, err := cmd.Output()
 	if err != nil {
 		return false
@@ -476,8 +474,8 @@ func (p *Podman) IsContainerRunning(ctx context.Context, containerName string) b
 }
 
 // GetContainerLogs returns the last n lines of container logs
-func (p *Podman) GetContainerLogs(ctx context.Context, containerName string, lines int) (string, error) {
-	cmd := exec.CommandContext(ctx, "podman", "logs", "--tail", fmt.Sprintf("%d", lines), containerName)
+func (d *Docker) GetContainerLogs(ctx context.Context, containerName string, lines int) (string, error) {
+	cmd := exec.CommandContext(ctx, "docker", "logs", "--tail", fmt.Sprintf("%d", lines), containerName)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", err
@@ -486,41 +484,41 @@ func (p *Podman) GetContainerLogs(ctx context.Context, containerName string, lin
 }
 
 // StopContainer stops a running container
-func (p *Podman) StopContainer(ctx context.Context, containerName string) error {
-	cmd := exec.CommandContext(ctx, "podman", "stop", "-t", "5", containerName)
+func (d *Docker) StopContainer(ctx context.Context, containerName string) error {
+	cmd := exec.CommandContext(ctx, "docker", "stop", "-t", "5", containerName)
 	return cmd.Run()
 }
 
 // RemoveContainer removes a container
-func (p *Podman) RemoveContainer(ctx context.Context, containerName string) error {
-	cmd := exec.CommandContext(ctx, "podman", "rm", "-f", containerName)
+func (d *Docker) RemoveContainer(ctx context.Context, containerName string) error {
+	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", containerName)
 	return cmd.Run()
 }
 
 // ContainerExists checks if a container with the given name exists (running or stopped)
-func (p *Podman) ContainerExists(ctx context.Context, containerName string) bool {
-	cmd := exec.CommandContext(ctx, "podman", "inspect", "--format", "{{.Id}}", containerName)
+func (d *Docker) ContainerExists(ctx context.Context, containerName string) bool {
+	cmd := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{.Id}}", containerName)
 	err := cmd.Run()
 	return err == nil
 }
 
 // RemoveExistingContainer removes an existing container with the given name if it exists
-func (p *Podman) RemoveExistingContainer(ctx context.Context, containerName string) error {
-	if !p.ContainerExists(ctx, containerName) {
+func (d *Docker) RemoveExistingContainer(ctx context.Context, containerName string) error {
+	if !d.ContainerExists(ctx, containerName) {
 		return nil // Container doesn't exist, nothing to do
 	}
 
-	p.Output("  %s\n", p.styles.Warning(fmt.Sprintf("Removing existing container '%s'...", containerName)))
+	d.Output("  %s\n", d.styles.Warning(fmt.Sprintf("Removing existing container '%s'...", containerName)))
 
 	// Stop the container if running
-	if p.IsContainerRunning(ctx, containerName) {
-		if err := p.StopContainer(ctx, containerName); err != nil {
+	if d.IsContainerRunning(ctx, containerName) {
+		if err := d.StopContainer(ctx, containerName); err != nil {
 			return fmt.Errorf("failed to stop existing container: %w", err)
 		}
 	}
 
 	// Remove the container
-	if err := p.RemoveContainer(ctx, containerName); err != nil {
+	if err := d.RemoveContainer(ctx, containerName); err != nil {
 		return fmt.Errorf("failed to remove existing container: %w", err)
 	}
 
@@ -539,8 +537,8 @@ type BuildImageOptions struct {
 	VolumeMounts []VolumeMount     // Additional volume mounts during build
 }
 
-// BuildImage builds an image using podman build
-func (p *Podman) BuildImage(ctx context.Context, opts BuildImageOptions) (string, error) {
+// BuildImage builds an image using docker build
+func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string, error) {
 	// Resolve the build context path
 	// The context is always relative to the workflow directory (conceptually /workflow)
 	// Examples:
@@ -577,7 +575,7 @@ func (p *Podman) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 		return "", fmt.Errorf("build context path does not exist: %s", absContextPath)
 	}
 
-	// Build the podman build command
+	// Build the docker build command
 	args := []string{"build"}
 
 	// Add image tag
@@ -625,59 +623,37 @@ func (p *Podman) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
 	}
 
-	// Mount workflow directory at /workflow during build
-	// This makes the workflow directory available at /workflow inside the Dockerfile
-	// consistent with how run steps work
-	// NOTE: Using read-write (rw) to allow build tools like pnpm to write temporary files.
-	// Future: Add filesystem isolation to prevent unwanted modifications to host files.
-	if opts.WorkflowDir != "" {
-		absWorkflowDir, err := filepath.Abs(opts.WorkflowDir)
-		if err != nil {
-			return "", fmt.Errorf("failed to get absolute path for workflow dir: %w", err)
-		}
-		args = append(args, "-v", fmt.Sprintf("%s:/workflow:rw", absWorkflowDir))
-	}
-
-	// Mount explicit volumes during build
-	for _, mount := range opts.VolumeMounts {
-		mode := "rw"
-		if mount.ReadOnly {
-			mode = "ro"
-		}
-		args = append(args, "-v", fmt.Sprintf("%s:%s:%s",
-			mount.HostPath,
-			mount.ContainerPath,
-			mode))
-	}
+	// Note: Docker build doesn't support -v flag for volume mounts during build
+	// Volume mounts are only available at runtime with docker run
 
 	// Add context path
 	args = append(args, absContextPath)
 
 	// Create prefixed writers for build output
-	logPrefix := p.styles.LogPrefix()
-	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, p.secrets)
-	stderrWriter := newPrefixWriter(os.Stderr, logPrefix, p.secrets)
+	logPrefix := d.styles.LogPrefix()
+	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, d.secrets)
+	stderrWriter := newPrefixWriter(os.Stderr, logPrefix, d.secrets)
 
-	cmd := exec.CommandContext(ctx, "podman", args...)
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 
 	if err := cmd.Run(); err != nil {
 		stdoutWriter.Flush()
 		stderrWriter.Flush()
-		return "", fmt.Errorf("podman build failed: %w", err)
+		return "", fmt.Errorf("docker build failed: %w", err)
 	}
 
 	stdoutWriter.Flush()
 	stderrWriter.Flush()
 
-	p.Output("  %s %s\n", p.styles.Success("Built:"), p.styles.Value(opts.ImageName))
+	d.Output("  %s %s\n", d.styles.Success("Built:"), d.styles.Value(opts.ImageName))
 	return opts.ImageName, nil
 }
 
 // GetImageID returns the image ID for a given image name
-func (p *Podman) GetImageID(ctx context.Context, imageName string) (string, error) {
-	cmd := exec.CommandContext(ctx, "podman", "image", "inspect", "--format", "{{.Id}}", imageName)
+func (d *Docker) GetImageID(ctx context.Context, imageName string) (string, error) {
+	cmd := exec.CommandContext(ctx, "docker", "image", "inspect", "--format", "{{.Id}}", imageName)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get image ID for %s: %w", imageName, err)
@@ -686,15 +662,15 @@ func (p *Podman) GetImageID(ctx context.Context, imageName string) (string, erro
 }
 
 // ImageExists checks if an image exists locally
-func (p *Podman) ImageExists(ctx context.Context, imageName string) bool {
-	cmd := exec.CommandContext(ctx, "podman", "image", "exists", imageName)
+func (d *Docker) ImageExists(ctx context.Context, imageName string) bool {
+	cmd := exec.CommandContext(ctx, "docker", "image", "inspect", imageName)
 	return cmd.Run() == nil
 }
 
 // maskSecrets replaces all secret values with [secret]
-func (p *Podman) maskSecrets(text string) string {
+func (d *Docker) maskSecrets(text string) string {
 	result := text
-	for _, secret := range p.secrets {
+	for _, secret := range d.secrets {
 		if secret != "" {
 			result = strings.ReplaceAll(result, secret, "[secret]")
 		}
@@ -703,8 +679,8 @@ func (p *Podman) maskSecrets(text string) string {
 }
 
 // StreamLogs streams container logs (for long-running containers)
-func (p *Podman) StreamLogs(ctx context.Context, containerName string) error {
-	cmd := exec.CommandContext(ctx, "podman", "logs", "-f", containerName)
+func (d *Docker) StreamLogs(ctx context.Context, containerName string) error {
+	cmd := exec.CommandContext(ctx, "docker", "logs", "-f", containerName)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -722,14 +698,14 @@ func (p *Podman) StreamLogs(ctx context.Context, containerName string) error {
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-			fmt.Println(p.maskSecrets(scanner.Text()))
+			fmt.Println(d.maskSecrets(scanner.Text()))
 		}
 	}()
 
 	go func() {
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
-			fmt.Fprintln(os.Stderr, p.maskSecrets(scanner.Text()))
+			fmt.Fprintln(os.Stderr, d.maskSecrets(scanner.Text()))
 		}
 	}()
 

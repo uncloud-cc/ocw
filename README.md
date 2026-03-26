@@ -31,9 +31,9 @@ Run the workflow with `ocw hello.yaml` and play around with `server.js` to see h
 Make sure you have these two installed:
 
 - [Go](https://go.dev/dl/) `v1.24`
-- [Podman](https://podman.io/docs/installation) `v5.7`
+- [Docker](https://docs.docker.com/get-docker/) `v5.7`
 
-Then install the `ocw` CLI: `go install github.com/uncloud-cc/ocw/cmd/ocw@<commit-hash>`
+Then install the `ocw` CLI: `go install github.com/uncloud-cc/ocw/cmd/ocw`
 
 Check if it worked by running `ocw --help`
 

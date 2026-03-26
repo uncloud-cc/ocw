@@ -61,8 +61,8 @@ type Runner struct {
 	EnvFile string
 	// Output function for logging (defaults to fmt.Printf)
 	Output func(format string, args ...any)
-	// Podman client for container operations
-	podman *Podman
+	// Docker client for container operations
+	docker *Docker
 	// builtImages tracks images built by build steps (keyed by step ID)
 	builtImages map[string]string
 	// builtImagesMu protects builtImages map
@@ -120,7 +120,7 @@ func NewRunner(workflowDir string) *Runner {
 	return &Runner{
 		WorkflowDir:          workflowDir,
 		Output:               output,
-		podman:               NewPodman(output, styles, nil),
+		docker:               NewDocker(output, styles, nil),
 		builtImages:          make(map[string]string),
 		builtImageConfigs:    make(map[string]*schema.BuildConfig),
 		backgroundContainers: make([]string, 0),
@@ -211,12 +211,12 @@ func (r *Runner) loadDotEnv(workflowEnv schema.Env) error {
 	// Store secret values for masking in outputs
 	r.secretValues = secretValues
 
-	// Set secrets on podman client for masking (all secret values)
+	// Set secrets on docker client for masking (all secret values)
 	// Only mask if showSecrets is false
 	if !r.showSecrets {
-		r.podman.SetSecrets(secretValues)
+		r.docker.SetSecrets(secretValues)
 	} else {
-		r.podman.SetSecrets(nil) // No masking
+		r.docker.SetSecrets(nil) // No masking
 	}
 
 	if len(dotenv.Vars) > 0 {
@@ -273,7 +273,7 @@ func (r *Runner) registerBackgroundContainer(name string) {
 func (r *Runner) createJobNetwork(ctx context.Context, jobName string) error {
 	r.networkName = fmt.Sprintf("ocw-%s-%d", sanitizeName(jobName), time.Now().UnixNano())
 	// Network creation is silent - only show errors
-	return r.podman.CreateNetwork(ctx, NetworkCreateOptions{
+	return r.docker.CreateNetwork(ctx, NetworkCreateOptions{
 		Name:   r.networkName,
 		Driver: "bridge",
 	})
@@ -285,7 +285,7 @@ func (r *Runner) cleanupNetwork() {
 		return
 	}
 	// Network cleanup is silent - only show errors
-	if err := r.podman.RemoveNetwork(context.Background(), r.networkName); err != nil {
+	if err := r.docker.RemoveNetwork(context.Background(), r.networkName); err != nil {
 		r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to remove network: %v", err)))
 	}
 	r.networkName = ""
@@ -420,10 +420,10 @@ func (r *Runner) cleanupBackgroundContainers() {
 	r.Output("\n%s\n", r.styles.Dim(fmt.Sprintf("Cleaning up %d background container(s)...", len(containers))))
 	ctx := context.Background()
 	for _, name := range containers {
-		if err := r.podman.StopContainer(ctx, name); err != nil {
+		if err := r.docker.StopContainer(ctx, name); err != nil {
 			r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to stop %s: %v", name, err)))
 		}
-		if err := r.podman.RemoveContainer(ctx, name); err != nil {
+		if err := r.docker.RemoveContainer(ctx, name); err != nil {
 			r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to remove %s: %v", name, err)))
 		}
 	}
@@ -900,7 +900,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	r.Output(r.styles.StepBox(name, "run", extra))
 
 	// Pull the image first
-	if err := r.podman.PullImage(ctx, image); err != nil {
+	if err := r.docker.PullImage(ctx, image); err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 
@@ -1069,7 +1069,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		Force:        r.force,
 	}
 
-	if err := r.podman.RunContainer(ctx, opts); err != nil {
+	if err := r.docker.RunContainer(ctx, opts); err != nil {
 		return fmt.Errorf("container execution failed: %w", err)
 	}
 
@@ -1194,7 +1194,7 @@ func (r *Runner) runBuildStep(ctx context.Context, step *schema.BuildStep) error
 		VolumeMounts: volumeMounts,
 	}
 
-	builtImage, err := r.podman.BuildImage(ctx, opts)
+	builtImage, err := r.docker.BuildImage(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("build failed: %w", err)
 	}
@@ -1392,7 +1392,7 @@ type VolumeMount struct {
 }
 
 // resolveStepVolumes resolves volume references for a step
-// Returns a list of mount specifications for podman
+// Returns a list of mount specifications for docker
 func (r *Runner) resolveStepVolumes(stepVolumes, jobVolumes schema.VolumeRefs) ([]VolumeMount, error) {
 	var mounts []VolumeMount
 	seen := make(map[string]bool)

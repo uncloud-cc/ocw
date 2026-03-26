@@ -7,7 +7,7 @@ app.use(express.json())
 
 app.get('/', (req: Request, res: Response) => {
   res.json({
-    message: 'Hello from Express TypeScript Server!',
+    message: 'Hello from Express TypeScript Server! 🎉',
     timestamp: new Date().toISOString(),
     version: '1.0.0'
   })

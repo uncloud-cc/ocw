@@ -281,10 +281,10 @@ func (r *Reloader) reload(wc *WatchedContainer) {
 	stopCtx, stopCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer stopCancel()
 
-	if err := r.runner.podman.StopContainer(stopCtx, wc.ContainerName); err != nil {
+	if err := r.runner.docker.StopContainer(stopCtx, wc.ContainerName); err != nil {
 		// Container might already be stopped, continue
 	}
-	if err := r.runner.podman.RemoveContainer(stopCtx, wc.ContainerName); err != nil {
+	if err := r.runner.docker.RemoveContainer(stopCtx, wc.ContainerName); err != nil {
 		// Container might not exist, continue
 	}
 
@@ -331,7 +331,7 @@ func (r *Reloader) rebuildAndReload(ctx context.Context, wc *WatchedContainer) e
 		WorkflowDir: r.runner.WorkflowDir,
 	}
 
-	builtImage, err := r.runner.podman.BuildImage(ctx, buildOpts)
+	builtImage, err := r.runner.docker.BuildImage(ctx, buildOpts)
 	if err != nil {
 		return fmt.Errorf("build failed: %w", err)
 	}
@@ -457,7 +457,7 @@ func (r *Reloader) justReload(ctx context.Context, wc *WatchedContainer) error {
 		}
 	}
 
-	return r.runner.podman.RunContainer(ctx, opts)
+	return r.runner.docker.RunContainer(ctx, opts)
 }
 
 // Stop stops all watchers and cancels pending reloads
