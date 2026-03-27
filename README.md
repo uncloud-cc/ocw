@@ -28,7 +28,7 @@ Run the workflow with `ocw hello.yaml` and play around with `server.js` to see h
 
 ## Install
 ```bash
-go install github.com/uncloud-cc/ocw/cmd/ocw
+go install github.com/uncloud-cc/ocw/cmd/ocw@latest
 ```
 
 Check if it worked by running `ocw --help`

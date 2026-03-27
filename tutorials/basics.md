@@ -16,7 +16,7 @@ Before we jump in, you need to install three things on your local machine to get
 
 - [Docker](https://docs.docker.com/get-docker/) it's an open-source container runtime that's secure by design
 - [Go](https://go.dev/dl/) for being able to run the `ocw cli`
-- [ocw cli](../README.md#install) for running ocw workflows → Just run `go install github.com/uncloud-cc/ocw/cmd`
+- [ocw cli](../README.md#install) for running ocw workflows → Just run `go install github.com/uncloud-cc/ocw/cmd/ocw@latest`
 
 ## Hello World!
 
