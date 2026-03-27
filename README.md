@@ -28,12 +28,17 @@ Run the workflow with `ocw hello.yaml` and play around with `server.js` to see h
 
 ## Install
 
-Make sure you have these two installed:
+**Via Homebrew:**
 
-- [Go](https://go.dev/dl/) `v1.24`
-- [Docker](https://docs.docker.com/get-docker/) `v5.7`
+```bash
+brew tap uncloud-cc/tap
+brew install ocw
+```
 
-Then install the `ocw` CLI: `go install github.com/uncloud-cc/ocw/cmd/ocw`
+**Via Go:**
+```bash
+go install github.com/uncloud-cc/ocw/cmd/ocw
+```
 
 Check if it worked by running `ocw --help`
 
@@ -50,5 +55,3 @@ Check if it worked by running `ocw --help`
 ## License
 
 MIT License - see [LICENSE](LICENSE) file.
-
-## Reference
