@@ -93,8 +93,15 @@ type NetworkCreateOptions struct {
 
 // CreateNetwork creates a Docker network
 func (d *Docker) CreateNetwork(ctx context.Context, opts NetworkCreateOptions) error {
+	if d.verbose {
+		d.Output("  %s Checking if network exists: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.Name))
+	}
+
 	// Check if network already exists
 	if d.NetworkExists(ctx, opts.Name) {
+		if d.verbose {
+			d.Output("  %s Network already exists: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.Name))
+		}
 		// Network exists, silently continue
 		return nil
 	}
@@ -105,14 +112,23 @@ func (d *Docker) CreateNetwork(ctx context.Context, opts NetworkCreateOptions) e
 	}
 
 	args := []string{"network", "create", "--driver", driver, opts.Name}
+	if d.verbose {
+		d.Output("  %s Executing: docker %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(strings.Join(args, " ")))
+	}
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	// Suppress network creation output - not interesting for users
 	cmd.Stdout = nil
 	cmd.Stderr = os.Stderr
 
+	if d.verbose {
+		d.Output("  %s Starting docker network create...\n", d.styles.Dim("[verbose]"))
+	}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create network %s: %w", opts.Name, err)
+	}
+	if d.verbose {
+		d.Output("  %s Network created successfully\n", d.styles.Dim("[verbose]"))
 	}
 
 	return nil

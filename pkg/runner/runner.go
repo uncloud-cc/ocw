@@ -176,10 +176,13 @@ func (r *Runner) initReloader() {
 // the template context with env vars and secrets.
 // Workflow env vars are loaded first as defaults, then .env overrides them.
 func (r *Runner) loadDotEnv(workflowEnv schema.Env) error {
+	r.logVerbose("Loading .env file...")
+
 	// Collect all secret values for masking (defaults + overrides)
 	var secretValues []string
 
 	// First, load workflow env vars as defaults
+	r.logVerbose("Loading %d workflow env vars as defaults", len(workflowEnv))
 	for key, envVar := range workflowEnv {
 		r.templateCtx.Env[key] = envVar.Value
 		if envVar.IsSecret {
@@ -198,17 +201,22 @@ func (r *Runner) loadDotEnv(workflowEnv schema.Env) error {
 
 	if r.EnvFile != "" {
 		// Custom env file specified
+		r.logVerbose("Loading custom env file: %s", r.EnvFile)
 		dotenv, err = LoadDotEnvFile(r.EnvFile)
 		envFileName = r.EnvFile
 	} else {
 		// Default: load .env from workflow directory
+		r.logVerbose("Looking for default .env file in: %s", r.WorkflowDir)
 		dotenv, err = LoadDotEnv(r.WorkflowDir)
 		envFileName = ".env"
 	}
 
 	if err != nil {
+		r.logVerbose("Error loading .env file: %v", err)
 		return err
 	}
+
+	r.logVerbose("Loaded %d variables from %s", len(dotenv.Vars), envFileName)
 
 	// Override workflow defaults with .env values
 	for key, value := range dotenv.Vars {
@@ -288,11 +296,16 @@ func (r *Runner) registerBackgroundContainer(name string) {
 // createJobNetwork creates a network for the current job
 func (r *Runner) createJobNetwork(ctx context.Context, jobName string) error {
 	r.networkName = fmt.Sprintf("ocw-%s-%d", sanitizeName(jobName), time.Now().UnixNano())
+	r.logVerbose("Creating job network: %s", r.networkName)
 	// Network creation is silent - only show errors
-	return r.docker.CreateNetwork(ctx, NetworkCreateOptions{
+	if err := r.docker.CreateNetwork(ctx, NetworkCreateOptions{
 		Name:   r.networkName,
 		Driver: "bridge",
-	})
+	}); err != nil {
+		return err
+	}
+	r.logVerbose("Network created successfully: %s", r.networkName)
+	return nil
 }
 
 // cleanupNetwork removes the job network
@@ -1408,33 +1421,41 @@ func parseDuration(s string, defaultVal time.Duration) time.Duration {
 
 // resolveVolumes resolves volume paths from the workflow schema
 func (r *Runner) resolveVolumes(volumes schema.Volumes) error {
+	r.logVerbose("Resolving %d workflow volumes...", len(volumes))
 	r.resolvedVolumes = make(map[string]*ResolvedVolume)
 
 	for name, vol := range volumes {
 		hostPath := vol.Path
+		r.logVerbose("  Resolving volume '%s' with path: %s", name, hostPath)
 
 		// Expand ~ to home directory
 		if strings.HasPrefix(hostPath, "~/") {
+			r.logVerbose("    Expanding ~ to home directory")
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				return fmt.Errorf("volume %q: failed to get home directory: %w", name, err)
 			}
 			hostPath = filepath.Join(homeDir, hostPath[2:])
+			r.logVerbose("    Expanded to: %s", hostPath)
 		}
 
 		if !filepath.IsAbs(hostPath) {
 			hostPath = filepath.Join(r.WorkflowDir, vol.Path)
+			r.logVerbose("    Relative path resolved to: %s", hostPath)
 		}
 
 		absPath, err := filepath.Abs(hostPath)
 		if err != nil {
 			return fmt.Errorf("volume %q: %w", name, err)
 		}
+		r.logVerbose("    Absolute path: %s", absPath)
 
 		// Verify path exists
+		r.logVerbose("    Checking if path exists...")
 		if _, err := os.Stat(absPath); err != nil {
 			return fmt.Errorf("volume %q path does not exist: %s", name, absPath)
 		}
+		r.logVerbose("    Path exists: %s", absPath)
 
 		mode := vol.Mode
 		if mode == "" {
@@ -1447,8 +1468,10 @@ func (r *Runner) resolveVolumes(volumes schema.Volumes) error {
 			Mode:      mode,
 			MountPath: vol.MountPath,
 		}
+		r.logVerbose("  Volume '%s' resolved successfully", name)
 	}
 
+	r.logVerbose("All %d volumes resolved successfully", len(volumes))
 	return nil
 }
 

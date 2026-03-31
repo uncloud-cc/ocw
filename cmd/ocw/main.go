@@ -5,11 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/uncloud-cc/ocw/pkg/runner"
 	"github.com/uncloud-cc/ocw/pkg/schema"
@@ -87,6 +90,18 @@ func run() error {
 	reorderedArgs := reorderArgs(os.Args[1:])
 	flag.CommandLine.Parse(reorderedArgs)
 
+	// Helper for early verbose output
+	verboseLog := func(format string, args ...interface{}) {
+		if *verbose {
+			fmt.Fprintf(os.Stderr, "[verbose] "+format+"\n", args...)
+		}
+	}
+
+	// Print system information if verbose mode is enabled
+	if *verbose {
+		printSystemInfo()
+	}
+
 	if *showVersion {
 		fmt.Printf("ocw version %s\n", version)
 		return nil
@@ -98,6 +113,7 @@ func run() error {
 	}
 
 	args := flag.Args()
+	verboseLog("Starting ocw with args: %v", args)
 
 	// Determine workflow file(s) and job name
 	var workflowPath string
@@ -106,64 +122,81 @@ func run() error {
 
 	if *workflowFile != "" {
 		// Explicit workflow file specified
+		verboseLog("Using explicit workflow file: %s", *workflowFile)
 		workflowPath = *workflowFile
 		if len(args) > 0 {
 			jobName = args[0]
+			verboseLog("Job name from args: %s", jobName)
 		}
 	} else if len(args) > 0 {
 		// Check if first arg is a file or a job name
 		if isYAMLFile(args[0]) {
+			verboseLog("First arg is a YAML file: %s", args[0])
 			workflowPath = args[0]
 			if len(args) > 1 {
 				jobName = args[1]
+				verboseLog("Job name from args: %s", jobName)
 			}
 		} else {
 			// First arg is a job name, auto-discover workflow files
+			verboseLog("First arg is job name: %s", args[0])
 			jobName = args[0]
 		}
 	}
 
 	// Auto-discover workflow files if no explicit file given
 	if workflowPath == "" {
+		verboseLog("Auto-discovering workflow files in current directory...")
 		files, err := discoverWorkflowFiles(".")
 		if err != nil {
 			return fmt.Errorf("failed to discover workflow files: %w", err)
 		}
+		verboseLog("Found %d workflow file(s): %v", len(files), files)
 		if len(files) == 0 {
 			return fmt.Errorf("no workflow files (*.yaml, *.yml) found in current directory")
 		}
 
 		// If no job specified, list available jobs
 		if jobName == "" {
+			verboseLog("No job specified, listing available jobs")
 			return listAvailableJobs(files)
 		}
 
 		// Find the job in workflow files
-		workflowPath, err = findJobInFiles(files, jobName)
+		verboseLog("Searching for job '%s' in workflow files...", jobName)
+		workflowPath, err = findJobInFiles(files, jobName, *verbose)
 		if err != nil {
 			return err
 		}
+		verboseLog("Found job in workflow file: %s", workflowPath)
 	}
 
 	// Get the absolute path to the workflow file
+	verboseLog("Resolving absolute path for: %s", workflowPath)
 	absWorkflowPath, err := filepath.Abs(workflowPath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve workflow path: %w", err)
 	}
+	verboseLog("Absolute workflow path: %s", absWorkflowPath)
 
 	// Get the directory containing the workflow file (this becomes /workflow)
 	workflowDir = filepath.Dir(absWorkflowPath)
+	verboseLog("Workflow directory: %s", workflowDir)
 
 	// Parse and validate the workflow (silently unless there's an error)
+	verboseLog("Parsing workflow file...")
 	ocw, err := schema.ParseFile(workflowPath)
 	if err != nil {
 		return fmt.Errorf("failed to parse workflow: %w", err)
 	}
+	verboseLog("Workflow parsed successfully: name=%s, schemaVersion=%s", ocw.Name, ocw.SchemaVersion)
 
 	// Validate
+	verboseLog("Validating workflow...")
 	if err := ocw.Validate(); err != nil {
 		return fmt.Errorf("workflow validation failed:\n%w", err)
 	}
+	verboseLog("Workflow validation passed")
 
 	if *validateOnly {
 		printWorkflowSummary(ocw)
@@ -184,10 +217,12 @@ func run() error {
 	}()
 
 	// Run the workflow or job
+	verboseLog("Creating runner...")
 	r := runner.NewRunner(workflowDir)
 	r.WorkflowFile = absWorkflowPath
 	r.WithVerbose(*verbose)
 	if *envFile != "" {
+		verboseLog("Using custom env file: %s", *envFile)
 		r.WithEnvFile(*envFile)
 	}
 	if *showSecrets {
@@ -198,10 +233,12 @@ func run() error {
 	}
 
 	if jobName != "" {
+		verboseLog("Running job: %s", jobName)
 		return r.RunJob(ctx, ocw, jobName)
 	}
 
 	// No job specified, run direct flow control
+	verboseLog("No job specified, checking for direct flow control...")
 	if !ocw.HasDirectFlow() {
 		// No direct flow, list available jobs
 		fmt.Printf("No direct flow control in workflow. Available jobs:\n")
@@ -216,6 +253,7 @@ func run() error {
 		return fmt.Errorf("specify a job name to run")
 	}
 
+	verboseLog("Running direct flow control")
 	return r.Run(ctx, ocw)
 }
 
@@ -248,15 +286,30 @@ func discoverWorkflowFiles(dir string) ([]string, error) {
 }
 
 // findJobInFiles searches for a job name across multiple workflow files
-func findJobInFiles(files []string, jobName string) (string, error) {
+func findJobInFiles(files []string, jobName string, verbose bool) (string, error) {
 	for _, file := range files {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "[verbose] Checking file for job '%s': %s\n", jobName, file)
+		}
 		ocw, err := schema.ParseFile(file)
 		if err != nil {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "[verbose]   Failed to parse, skipping: %v\n", err)
+			}
 			continue // Skip files that fail to parse
+		}
+		if verbose {
+			fmt.Fprintf(os.Stderr, "[verbose]   Parsed successfully, found %d job(s)\n", len(ocw.GetJobNames()))
 		}
 
 		if ocw.GetJob(jobName) != nil {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "[verbose]   Found job '%s' in this file\n", jobName)
+			}
 			return file, nil
+		}
+		if verbose {
+			fmt.Fprintf(os.Stderr, "[verbose]   Job '%s' not found in this file\n", jobName)
 		}
 	}
 
@@ -358,4 +411,51 @@ func printWorkflowSummary(ocw *schema.OCW) {
 	if len(ocw.Outputs) > 0 {
 		fmt.Printf("  Outputs: %d\n", len(ocw.Outputs))
 	}
+}
+
+// printSystemInfo prints system diagnostic information when verbose mode is enabled
+func printSystemInfo() {
+	fmt.Fprintf(os.Stderr, "[verbose] === System Information ===\n")
+	fmt.Fprintf(os.Stderr, "[verbose] Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Fprintf(os.Stderr, "[verbose] Go version: %s\n", runtime.Version())
+
+	// Current user
+	user := os.Getenv("USER")
+	if user == "" {
+		user = os.Getenv("USERNAME")
+	}
+	if user == "" {
+		user = "unknown"
+	}
+	fmt.Fprintf(os.Stderr, "[verbose] Current user: %s\n", user)
+
+	// Working directory
+	wd, err := os.Getwd()
+	if err != nil {
+		wd = "unknown"
+	}
+	fmt.Fprintf(os.Stderr, "[verbose] Working directory: %s\n", wd)
+
+	// Docker version (with timeout to avoid hanging)
+	fmt.Fprintf(os.Stderr, "[verbose] Checking Docker version...\n")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "docker", "version", "--format", "{{.Server.Version}}")
+	output, err := cmd.Output()
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			fmt.Fprintf(os.Stderr, "[verbose] Docker version check timed out (5s)\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "[verbose] Docker version: unavailable (%v)\n", err)
+		}
+	} else {
+		version := strings.TrimSpace(string(output))
+		if version == "" {
+			version = "unknown"
+		}
+		fmt.Fprintf(os.Stderr, "[verbose] Docker version: %s\n", version)
+	}
+
+	fmt.Fprintf(os.Stderr, "[verbose] ======================\n")
 }
