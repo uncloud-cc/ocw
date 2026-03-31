@@ -61,6 +61,7 @@ func run() error {
 	help := flag.Bool("help", false, "Show help")
 	showSecrets := flag.Bool("show-secrets", false, "Show secret values in output (unmask secrets)")
 	force := flag.Bool("force", false, "Force remove existing containers with the same name")
+	verbose := flag.Bool("verbose", false, "Enable verbose logging of internal steps")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "ocw - Open Container Workflow CLI\n\n")
@@ -78,6 +79,7 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "  ocw -validate -f my.yaml    Validate a workflow file\n")
 		fmt.Fprintf(os.Stderr, "  ocw -show-secrets dev       Run 'dev' job showing secret values\n")
 		fmt.Fprintf(os.Stderr, "  ocw -force dev              Run 'dev' job, replacing existing containers\n")
+		fmt.Fprintf(os.Stderr, "  ocw -verbose dev            Run 'dev' job with verbose logging\n")
 	}
 
 	// Reorder args to support flags anywhere in the command line
@@ -184,6 +186,7 @@ func run() error {
 	// Run the workflow or job
 	r := runner.NewRunner(workflowDir)
 	r.WorkflowFile = absWorkflowPath
+	r.WithVerbose(*verbose)
 	if *envFile != "" {
 		r.WithEnvFile(*envFile)
 	}
