@@ -499,11 +499,13 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 				d.Output("\n%s\n", d.styles.Info("Attaching to debug container..."))
 				d.Output("  %s %s\n", d.styles.Dim("Target processes:"), d.styles.Value("visible via ps, top, etc."))
 				d.Output("  %s %s\n", d.styles.Dim("Target filesystem:"), d.styles.Value("/proc/1/root/"))
-				d.Output("  %s %s\n", d.styles.Dim("Volume mounts:"), d.styles.Value("/target/<mount-path>"))
+				d.Output("  %s %s\n", d.styles.Dim("Working directory:"), d.styles.Value("/proc/1/root/workflow/"))
 				d.Output("  %s\n", d.styles.Dim("Press Ctrl+D or type 'exit' to detach\n"))
 
 				// Run interactive shell in the debug container
-				attachCmd := exec.CommandContext(ctx, "docker", "exec", "-it", opts.DebugContainer, "/bin/bash")
+				// Explicitly cd to /proc/1/root/workflow before starting bash
+				attachCmd := exec.CommandContext(ctx, "docker", "exec", "-it", opts.DebugContainer, "/bin/bash", "-c",
+					"cd /proc/1/root/workflow 2>/dev/null || cd /target/workflow 2>/dev/null || cd /proc/1/root 2>/dev/null || cd /; exec /bin/bash")
 				attachCmd.Stdin = os.Stdin
 				attachCmd.Stdout = os.Stdout
 				attachCmd.Stderr = os.Stderr
@@ -516,7 +518,7 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 			} else {
 				d.Output("  %s %s\n", d.styles.Dim("Attach with:"), d.styles.Value(fmt.Sprintf("docker exec -it %s /bin/bash", opts.DebugContainer)))
 				d.Output("  %s %s\n", d.styles.Dim("Target filesystem:"), d.styles.Value("/proc/1/root/"))
-				d.Output("  %s %s\n", d.styles.Dim("Volume mounts:"), d.styles.Value("/target/<mount-path>"))
+				d.Output("  %s %s\n", d.styles.Dim("Working directory:"), d.styles.Value("/proc/1/root/workflow/"))
 				d.Output("  %s\n", d.styles.Dim("Note: Debug sidecar remains accessible even if main container crashes"))
 			}
 		}
@@ -1003,6 +1005,44 @@ func (d *Docker) runNamespaceSidecar(ctx context.Context, opts DebugSidecarOptio
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to create namespace sidecar: %w\nOutput: %s", err, string(output))
+	}
+
+	// Setup the sidecar environment after creation
+	// Wait a moment for container to be ready, then create symlink and configure shell
+	time.Sleep(100 * time.Millisecond)
+
+	// Retry setup a few times in case container isn't ready yet
+	var setupErr error
+	for i := 0; i < 3; i++ {
+		// Explicitly set HOME=/root to avoid inheriting host's HOME
+		setupCmd := exec.CommandContext(ctx, "docker", "exec", "-e", "HOME=/root", opts.DebugContainer,
+			"sh", "-c", `
+				ln -sf /proc/1/root /target 2>/dev/null || true
+				# Create a .bashrc that cds to the target workflow on startup
+				# Try /proc/1/root/workflow first, fallback to /target/workflow
+				echo 'cd /proc/1/root/workflow 2>/dev/null || cd /target/workflow 2>/dev/null || cd /proc/1/root 2>/dev/null || cd / || true' > /root/.bashrc
+				# Also set PWD env var hint
+				echo 'export PWD=/proc/1/root/workflow' >> /root/.bashrc
+				# Create a helpful motd
+				echo 'Debug sidecar ready!' > /etc/motd
+				echo 'Target filesystem: /proc/1/root/ or /target/' >> /etc/motd
+				echo 'Workflow: /proc/1/root/workflow/' >> /etc/motd
+			`)
+		if setupErr = setupCmd.Run(); setupErr == nil {
+			break
+		}
+		if d.verbose {
+			d.Output("  %s Setup attempt %d failed: %v\n", d.styles.Dim("[verbose]"), i+1, setupErr)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if d.verbose {
+		if setupErr != nil {
+			d.Output("  %s Warning: could not setup shell environment: %v\n", d.styles.Dim("[verbose]"), setupErr)
+		} else {
+			d.Output("  %s Debug sidecar environment configured\n", d.styles.Dim("[verbose]"))
+		}
 	}
 
 	if d.verbose {
