@@ -476,6 +476,10 @@ func (r *Runner) cleanupBackgroundContainers() {
 		r.Output("\n%s\n", r.styles.Dim(fmt.Sprintf("Cleaning up %d debug container(s)...", len(debugContainers))))
 		ctx := context.Background()
 		for _, name := range debugContainers {
+			// Only attempt cleanup if container still exists
+			if !r.docker.ContainerExists(ctx, name) {
+				continue
+			}
 			if err := r.docker.StopContainer(ctx, name); err != nil {
 				r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to stop debug container %s: %v", name, err)))
 			}
@@ -516,6 +520,10 @@ func (r *Runner) cleanupBackgroundContainers() {
 	r.Output("\n%s\n", r.styles.Dim(fmt.Sprintf("Cleaning up %d background container(s)...", len(containers))))
 	ctx := context.Background()
 	for _, name := range containers {
+		// Only attempt cleanup if container still exists
+		if !r.docker.ContainerExists(ctx, name) {
+			continue
+		}
 		if err := r.docker.StopContainer(ctx, name); err != nil {
 			r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to stop %s: %v", name, err)))
 		}
