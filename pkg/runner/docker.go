@@ -358,6 +358,14 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 		}
 	}
 
+	// Enable shareable IPC namespace when debug sidecar will be attached
+	if opts.DebugImage != "" {
+		args = append(args, "--ipc=shareable")
+		if d.verbose {
+			d.Output("  %s IPC: shareable (for debug sidecar)\n", d.styles.Dim("[verbose]"))
+		}
+	}
+
 	// TTY
 	if opts.TTY {
 		args = append(args, "-t")
@@ -914,11 +922,12 @@ func (d *Docker) runNamespaceSidecar(ctx context.Context, opts DebugSidecarOptio
 	}
 
 	// Add working directory and image last
-	// For namespace sidecar, use /proc/1/root/ to access target filesystem
+	// Set a safe working directory within the sidecar's filesystem
+	// Users can access target filesystem via /proc/1/root/ after attaching
 	args = append(args,
-		"-w", "/proc/1/root",    // Set working directory to target container's root
-		opts.DebugImage,          // The debug image
-		"sleep", "infinity",      // Keep the container running
+		"-w", "/", // Working directory within sidecar's own filesystem
+		opts.DebugImage,     // The debug image
+		"sleep", "infinity", // Keep the container running
 	)
 
 	if d.verbose {
@@ -1065,20 +1074,20 @@ func (d *Docker) runFilesystemSidecar(ctx context.Context, opts DebugSidecarOpti
 					mode = "rw"
 				}
 
-			// Mount inside /target to recreate full container filesystem view
-			targetPath := filepath.Join("/target", mount.Destination)
-			args = append(args, "-v", fmt.Sprintf("%s:%s:%s", mount.Source, targetPath, mode))
-			
-			if d.verbose {
-				d.Output("  %s Re-mounting %s -> %s (%s)\n", d.styles.Dim("[verbose]"), d.styles.Dim(mount.Source), d.styles.Dim(targetPath), d.styles.Dim(mode))
-			}
+				// Mount inside /target to recreate full container filesystem view
+				targetPath := filepath.Join("/target", mount.Destination)
+				args = append(args, "-v", fmt.Sprintf("%s:%s:%s", mount.Source, targetPath, mode))
+
+				if d.verbose {
+					d.Output("  %s Re-mounting %s -> %s (%s)\n", d.styles.Dim("[verbose]"), d.styles.Dim(mount.Source), d.styles.Dim(targetPath), d.styles.Dim(mode))
+				}
 			}
 		}
 	}
 
 	// Add image and command last
 	args = append(args,
-		"-w", "/target",        // Set working directory to /target
+		"-w", "/target", // Set working directory to /target
 		opts.DebugImage,     // The debug image
 		"sleep", "infinity", // Keep the container running
 	)
