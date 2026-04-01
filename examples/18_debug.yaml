@@ -1,0 +1,5 @@
+sequence:
+  - name: Hello Step
+    image: alpine
+    cmd: echo "Hello!"
+    debug: true
