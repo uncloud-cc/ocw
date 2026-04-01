@@ -99,8 +99,8 @@ type Runner struct {
 	// builtImageConfigs stores build configs for rebuilds in watch mode
 	builtImageConfigs map[string]*schema.BuildConfig
 
-	// debug enables debug sidecar containers for all steps
-	debug bool
+	// debugStepID specifies which step to debug (empty = no CLI debug)
+	debugStepID string
 	// debugContainers tracks running debug sidecar containers for cleanup
 	debugContainers []string
 	// debugVolumes tracks debug volumes for cleanup
@@ -169,9 +169,9 @@ func (r *Runner) WithForce(force bool) *Runner {
 	return r
 }
 
-// WithDebug enables or disables debug mode for all containers
-func (r *Runner) WithDebug(debug bool) *Runner {
-	r.debug = debug
+// WithDebug enables debug mode for a specific step by its ID
+func (r *Runner) WithDebug(stepID string) *Runner {
+	r.debugStepID = stepID
 	return r
 }
 
@@ -952,7 +952,10 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 
 	// If debug mode is enabled, implicitly run as background container
 	// (debug mode only works with long-running/background containers)
-	debugEnabled := (step.Debug != nil && step.Debug.IsEnabled()) || r.debug
+	// Check if this step should be debugged (either via workflow config or CLI flag)
+	stepID := string(step.ID)
+	cliDebugEnabled := r.debugStepID != "" && r.debugStepID == stepID
+	debugEnabled := (step.Debug != nil && step.Debug.IsEnabled()) || cliDebugEnabled
 	if debugEnabled && !step.Background {
 		r.Output("  %s\n", r.styles.Info("Debug mode: running container in background for inspection"))
 		step.Background = true
@@ -1185,7 +1188,6 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	}
 
 	// Set up OUTPUTS env var for step outputs (if step has an ID)
-	stepID := string(step.ID)
 	if stepID != "" {
 		// Path inside container: /workflow/.ocw-outputs/<step-id>
 		env["OUTPUTS"] = fmt.Sprintf("/workflow/.ocw-outputs/%s", stepID)
@@ -1205,12 +1207,15 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 
 	// Prepare debug sidecar configuration if enabled
 	var debugImage, debugContainerName string
+	var debugAttach bool
 	if debugEnabled && step.Background && containerName != "" {
 		debugImage = "nicolaka/netshoot" // default
 		if step.Debug != nil {
 			debugImage = step.Debug.GetImage()
 		}
 		debugContainerName = containerName + "-debug"
+		// Enable immediate attach when debug is triggered via CLI flag
+		debugAttach = cliDebugEnabled
 	}
 
 	opts := RunContainerOptions{
@@ -1233,6 +1238,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		Force:          r.force,
 		DebugImage:     debugImage,
 		DebugContainer: debugContainerName,
+		DebugAttach:    debugAttach,
 		OnContainerStart: func(debugContainer string) {
 			r.registerDebugContainer(debugContainer)
 		},

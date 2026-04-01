@@ -274,6 +274,7 @@ type RunContainerOptions struct {
 	Force            bool               // Force remove existing container with same name
 	DebugImage       string             // Debug sidecar image (empty = no debug sidecar)
 	DebugContainer   string             // Debug sidecar container name
+	DebugAttach      bool               // Immediately attach to debug container (for CLI debug mode)
 	OnContainerStart func(string)       // Callback when container starts (for debug sidecar)
 	OnVolumeCreate   func(string)       // Callback when debug volume is created (for filesystem sidecar)
 }
@@ -488,12 +489,35 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 			d.Output("  %s\n", d.styles.Warning(fmt.Sprintf("Warning: failed to create debug sidecar: %v", err)))
 		} else {
 			d.Output("  %s %s\n", d.styles.Label("Debug container:"), d.styles.Value(opts.DebugContainer))
-			d.Output("  %s %s\n", d.styles.Dim("Attach with:"), d.styles.Value(fmt.Sprintf("docker exec -it %s /bin/bash", opts.DebugContainer)))
-			d.Output("  %s\n", d.styles.Dim("Container filesystem (with all mounts): /target"))
-			d.Output("  %s\n", d.styles.Dim("Note: Debug sidecar remains accessible even if main container crashes"))
 			// Call the callback to register the debug container
 			if opts.OnContainerStart != nil {
 				opts.OnContainerStart(opts.DebugContainer)
+			}
+
+			// If immediate attach is requested, drop into the debug container
+			if opts.DebugAttach {
+				d.Output("\n%s\n", d.styles.Info("Attaching to debug container..."))
+				d.Output("  %s %s\n", d.styles.Dim("Target processes:"), d.styles.Value("visible via ps, top, etc."))
+				d.Output("  %s %s\n", d.styles.Dim("Target filesystem:"), d.styles.Value("/proc/1/root/"))
+				d.Output("  %s %s\n", d.styles.Dim("Volume mounts:"), d.styles.Value("/target/<mount-path>"))
+				d.Output("  %s\n", d.styles.Dim("Press Ctrl+D or type 'exit' to detach\n"))
+
+				// Run interactive shell in the debug container
+				attachCmd := exec.CommandContext(ctx, "docker", "exec", "-it", opts.DebugContainer, "/bin/bash")
+				attachCmd.Stdin = os.Stdin
+				attachCmd.Stdout = os.Stdout
+				attachCmd.Stderr = os.Stderr
+				if err := attachCmd.Run(); err != nil {
+					// Don't fail the whole workflow if user exits the shell
+					if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() != 0 {
+						d.Output("  %s\n", d.styles.Dim("Debug shell exited"))
+					}
+				}
+			} else {
+				d.Output("  %s %s\n", d.styles.Dim("Attach with:"), d.styles.Value(fmt.Sprintf("docker exec -it %s /bin/bash", opts.DebugContainer)))
+				d.Output("  %s %s\n", d.styles.Dim("Target filesystem:"), d.styles.Value("/proc/1/root/"))
+				d.Output("  %s %s\n", d.styles.Dim("Volume mounts:"), d.styles.Value("/target/<mount-path>"))
+				d.Output("  %s\n", d.styles.Dim("Note: Debug sidecar remains accessible even if main container crashes"))
 			}
 		}
 	}
@@ -901,6 +925,30 @@ func (d *Docker) runNamespaceSidecar(ctx context.Context, opts DebugSidecarOptio
 		}
 	}
 
+	// Get volume mounts from the target container
+	mountsCmd := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{json .Mounts}}", opts.TargetContainer)
+	mountsOutput, err := mountsCmd.Output()
+	if err != nil {
+		if d.verbose {
+			d.Output("  %s Warning: could not get container mounts: %v\n", d.styles.Dim("[verbose]"), err)
+		}
+	}
+
+	// Parse mounts
+	type MountInfo struct {
+		Type        string `json:"Type"`
+		Source      string `json:"Source"`
+		Destination string `json:"Destination"`
+		Mode        string `json:"Mode"`
+		RW          bool   `json:"RW"`
+	}
+	var mounts []MountInfo
+	if err := json.Unmarshal(mountsOutput, &mounts); err != nil {
+		if d.verbose {
+			d.Output("  %s Warning: could not parse container mounts: %v\n", d.styles.Dim("[verbose]"), err)
+		}
+	}
+
 	// Build docker run command with namespace sharing
 	args := []string{
 		"run",
@@ -910,7 +958,7 @@ func (d *Docker) runNamespaceSidecar(ctx context.Context, opts DebugSidecarOptio
 		"--network=container:" + opts.TargetContainer, // Share network namespace
 		"--ipc=container:" + opts.TargetContainer,     // Share IPC namespace
 		// Note: We don't share the mount namespace because that would hide the debug tools.
-		// Instead, users can access the target's filesystem via /proc/1/root
+		// Instead, we mount the same volumes directly in the sidecar.
 		"--init",               // Use tini for proper signal handling
 		"--cap-add=SYS_PTRACE", // Allow debugging processes
 		"--cap-add=SYS_ADMIN",  // Allow various admin operations
@@ -919,6 +967,23 @@ func (d *Docker) runNamespaceSidecar(ctx context.Context, opts DebugSidecarOptio
 	// Add environment variables
 	for _, env := range envVars {
 		args = append(args, "-e", env)
+	}
+
+	// Add volume mounts from target container to /target/<destination>
+	// This makes them accessible at predictable paths in the sidecar
+	for _, mount := range mounts {
+		if mount.Type == "bind" || mount.Type == "volume" {
+			mode := "ro"
+			if mount.RW {
+				mode = "rw"
+			}
+			// Mount to /target/<destination> so users can find them easily
+			targetPath := "/target" + mount.Destination
+			args = append(args, "-v", fmt.Sprintf("%s:%s:%s", mount.Source, targetPath, mode))
+			if d.verbose {
+				d.Output("  %s Mounting volume: %s -> %s (%s)\n", d.styles.Dim("[verbose]"), mount.Source, targetPath, mode)
+			}
+		}
 	}
 
 	// Add working directory and image last
