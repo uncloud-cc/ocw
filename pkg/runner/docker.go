@@ -275,6 +275,7 @@ type RunContainerOptions struct {
 	DebugImage       string             // Debug sidecar image (empty = no debug sidecar)
 	DebugContainer   string             // Debug sidecar container name
 	DebugAttach      bool               // Immediately attach to debug container (for CLI debug mode)
+	DebugCLI         bool               // Whether debug was triggered via CLI flag (affects error handling)
 	OnContainerStart func(string)       // Callback when container starts (for debug sidecar)
 	OnVolumeCreate   func(string)       // Callback when debug volume is created (for filesystem sidecar)
 }
@@ -510,10 +511,16 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 				attachCmd.Stdout = os.Stdout
 				attachCmd.Stderr = os.Stderr
 				if err := attachCmd.Run(); err != nil {
-					// Don't fail the whole workflow if user exits the shell
+					// User exited with error code
 					if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() != 0 {
-						d.Output("  %s\n", d.styles.Dim("Debug shell exited"))
+						d.Output("  %s\n", d.styles.Dim("Debug shell exited with error"))
 					}
+				}
+
+				// In CLI debug mode, terminate workflow gracefully after user exits the debug shell
+				if opts.DebugCLI {
+					d.Output("  %s\n", d.styles.Success("Debug session ended"))
+					return nil // Exit cleanly, not as an error
 				}
 			} else {
 				d.Output("  %s %s\n", d.styles.Dim("Attach with:"), d.styles.Value(fmt.Sprintf("docker exec -it %s /bin/bash", opts.DebugContainer)))
@@ -548,6 +555,7 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 			d.RemoveContainer(context.Background(), containerName)
 			return fmt.Errorf("background container exited immediately. Logs:\n%s", logs)
 		}
+
 		d.Output("  %s\n", d.styles.Success("Container started"))
 	}
 

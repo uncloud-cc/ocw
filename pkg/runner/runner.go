@@ -101,6 +101,8 @@ type Runner struct {
 
 	// debugStepID specifies which step to debug (empty = no CLI debug)
 	debugStepID string
+	// debugCompleted tracks whether CLI debug session has completed (to skip waiting)
+	debugCompleted bool
 	// debugContainers tracks running debug sidecar containers for cleanup
 	debugContainers []string
 	// debugVolumes tracks debug volumes for cleanup
@@ -619,6 +621,18 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 	r.runID = gonanoid.Must(5)
 	r.logVerbose("Generated run ID: %s", r.runID)
 
+	// Print debug tip at the very end if CLI debug was used
+	// (must be registered BEFORE cleanup so it runs AFTER them in LIFO order)
+	defer func() {
+		if r.debugCompleted {
+			r.Output("\n%s\n", r.styles.Info("💡 Tip: For multiple detached debug containers, use the workflow 'debug: true' option:"))
+			r.Output("  %s\n", r.styles.Dim(" - name: My Step"))
+			r.Output("  %s\n", r.styles.Dim("   id: mystep"))
+			r.Output("  %s\n", r.styles.Dim("   debug: true"))
+			r.Output("  %s\n", r.styles.Dim("   # ... rest of step config"))
+		}
+	}()
+
 	// Ensure background containers and outputs are cleaned up when done
 	defer r.cleanupBackgroundContainers()
 	defer r.cleanupOutputsDir()
@@ -694,6 +708,12 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 	r.logVerbose("Workflow execution completed in %v", duration.Round(time.Millisecond))
 	r.Output(r.styles.CompletionBanner(string(ocw.Name), duration.Round(time.Millisecond).String(), err == nil))
 
+	// If CLI debug completed, skip waiting and exit cleanly
+	// (tip will be shown by the deferred function at the very end)
+	if r.debugCompleted {
+		return nil
+	}
+
 	// If there are background containers running and no errors, wait for interrupt
 	if err == nil && r.hasBackgroundContainers() {
 		r.waitForInterrupt()
@@ -709,6 +729,18 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 	// Generate unique run ID for this workflow execution (enables parallel runs)
 	r.runID = gonanoid.Must(5)
 	r.logVerbose("Generated run ID: %s", r.runID)
+
+	// Print debug tip at the very end if CLI debug was used
+	// (must be registered BEFORE cleanup so it runs AFTER them in LIFO order)
+	defer func() {
+		if r.debugCompleted {
+			r.Output("\n%s\n", r.styles.Info("💡 Tip: For multiple detached debug containers, use the workflow 'debug: true' option:"))
+			r.Output("  %s\n", r.styles.Dim(" - name: My Step"))
+			r.Output("  %s\n", r.styles.Dim("   id: mystep"))
+			r.Output("  %s\n", r.styles.Dim("   debug: true"))
+			r.Output("  %s\n", r.styles.Dim("   # ... rest of step config"))
+		}
+	}()
 
 	// Ensure background containers and outputs are cleaned up when done
 	defer r.cleanupBackgroundContainers()
@@ -807,6 +839,12 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 	duration := time.Since(start)
 	r.logVerbose("Job execution completed in %v", duration.Round(time.Millisecond))
 	r.Output(r.styles.CompletionBanner(displayName, duration.Round(time.Millisecond).String(), err == nil))
+
+	// If CLI debug completed, skip waiting and exit cleanly
+	// (tip will be shown by the deferred function at the very end)
+	if r.debugCompleted {
+		return nil
+	}
 
 	// If there are background containers running and no errors, wait for interrupt
 	if err == nil && r.hasBackgroundContainers() {
@@ -1208,6 +1246,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	// Prepare debug sidecar configuration if enabled
 	var debugImage, debugContainerName string
 	var debugAttach bool
+	var debugCLI bool
 	if debugEnabled && step.Background && containerName != "" {
 		debugImage = "nicolaka/netshoot" // default
 		if step.Debug != nil {
@@ -1216,6 +1255,8 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		debugContainerName = containerName + "-debug"
 		// Enable immediate attach when debug is triggered via CLI flag
 		debugAttach = cliDebugEnabled
+		// Track whether this is CLI debug mode (affects error handling)
+		debugCLI = cliDebugEnabled
 	}
 
 	opts := RunContainerOptions{
@@ -1239,6 +1280,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		DebugImage:     debugImage,
 		DebugContainer: debugContainerName,
 		DebugAttach:    debugAttach,
+		DebugCLI:       debugCLI,
 		OnContainerStart: func(debugContainer string) {
 			r.registerDebugContainer(debugContainer)
 		},
@@ -1252,6 +1294,14 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		return fmt.Errorf("container execution failed: %w", err)
 	}
 	r.logVerbose("Container execution completed")
+
+	// If CLI debug mode was used for this step, mark as completed and return early
+	// This prevents the workflow from waiting for background containers
+	if cliDebugEnabled {
+		r.debugCompleted = true
+		r.Output(r.styles.StepComplete(name, true))
+		return nil
+	}
 
 	// Track background containers for cleanup
 	if step.Background && containerName != "" {
