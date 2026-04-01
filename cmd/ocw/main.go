@@ -65,6 +65,7 @@ func run() error {
 	showSecrets := flag.Bool("show-secrets", false, "Show secret values in output (unmask secrets)")
 	force := flag.Bool("force", false, "Force remove existing containers with the same name")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging of internal steps")
+	debug := flag.Bool("debug", false, "Enable debug mode (spawn netshoot sidecar for all containers)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "ocw - Open Container Workflow CLI\n\n")
@@ -83,6 +84,7 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "  ocw -show-secrets dev       Run 'dev' job showing secret values\n")
 		fmt.Fprintf(os.Stderr, "  ocw -force dev              Run 'dev' job, replacing existing containers\n")
 		fmt.Fprintf(os.Stderr, "  ocw -verbose dev            Run 'dev' job with verbose logging\n")
+		fmt.Fprintf(os.Stderr, "  ocw -debug dev              Run 'dev' job with debug sidecars\n")
 	}
 
 	// Reorder args to support flags anywhere in the command line
@@ -230,6 +232,9 @@ func run() error {
 	}
 	if *force {
 		r.WithForce(true)
+	}
+	if *debug {
+		r.WithDebug(true)
 	}
 
 	if jobName != "" {

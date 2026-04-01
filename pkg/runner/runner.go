@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -98,6 +99,15 @@ type Runner struct {
 	// builtImageConfigs stores build configs for rebuilds in watch mode
 	builtImageConfigs map[string]*schema.BuildConfig
 
+	// debug enables debug sidecar containers for all steps
+	debug bool
+	// debugContainers tracks running debug sidecar containers for cleanup
+	debugContainers []string
+	// debugVolumes tracks debug volumes for cleanup
+	debugVolumes []string
+	// debugMu protects debugContainers and debugVolumes slices
+	debugMu sync.Mutex
+
 	// resolvedVolumes stores resolved workflow volumes
 	resolvedVolumes map[string]*ResolvedVolume
 
@@ -126,6 +136,7 @@ func NewRunner(workflowDir string) *Runner {
 		builtImages:          make(map[string]string),
 		builtImageConfigs:    make(map[string]*schema.BuildConfig),
 		backgroundContainers: make([]string, 0),
+		debugContainers:      make([]string, 0),
 		exposedServices:      make([]ExposedService, 0),
 		templateCtx:          NewTemplateContext(),
 		styles:               styles,
@@ -155,6 +166,12 @@ func (r *Runner) WithShowSecrets(show bool) *Runner {
 // WithForce sets whether to force remove existing containers with the same name
 func (r *Runner) WithForce(force bool) *Runner {
 	r.force = force
+	return r
+}
+
+// WithDebug enables or disables debug mode for all containers
+func (r *Runner) WithDebug(debug bool) *Runner {
+	r.debug = debug
 	return r
 }
 
@@ -291,6 +308,20 @@ func (r *Runner) registerBackgroundContainer(name string) {
 	r.backgroundMu.Lock()
 	defer r.backgroundMu.Unlock()
 	r.backgroundContainers = append(r.backgroundContainers, name)
+}
+
+// registerDebugContainer adds a debug container to the cleanup list
+func (r *Runner) registerDebugContainer(name string) {
+	r.debugMu.Lock()
+	defer r.debugMu.Unlock()
+	r.debugContainers = append(r.debugContainers, name)
+}
+
+// registerDebugVolume adds a debug volume to the cleanup list
+func (r *Runner) registerDebugVolume(name string) {
+	r.debugMu.Lock()
+	defer r.debugMu.Unlock()
+	r.debugVolumes = append(r.debugVolumes, name)
 }
 
 // createJobNetwork creates a network for the current job
@@ -432,6 +463,42 @@ func (r *Runner) cleanupBackgroundContainers() {
 	// Stop reloader first (stops file watchers and pending reloads)
 	if r.reloader != nil {
 		r.reloader.Stop()
+	}
+
+	// Clean up debug containers first (they depend on main containers)
+	r.debugMu.Lock()
+	debugContainers := make([]string, len(r.debugContainers))
+	copy(debugContainers, r.debugContainers)
+	r.debugContainers = r.debugContainers[:0]
+	r.debugMu.Unlock()
+
+	if len(debugContainers) > 0 {
+		r.Output("\n%s\n", r.styles.Dim(fmt.Sprintf("Cleaning up %d debug container(s)...", len(debugContainers))))
+		ctx := context.Background()
+		for _, name := range debugContainers {
+			if err := r.docker.StopContainer(ctx, name); err != nil {
+				r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to stop debug container %s: %v", name, err)))
+			}
+			if err := r.docker.RemoveContainer(ctx, name); err != nil {
+				r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to remove debug container %s: %v", name, err)))
+			}
+		}
+
+		// Clean up debug volumes
+		r.debugMu.Lock()
+		debugVolumes := make([]string, len(r.debugVolumes))
+		copy(debugVolumes, r.debugVolumes)
+		r.debugVolumes = r.debugVolumes[:0]
+		r.debugMu.Unlock()
+
+		if len(debugVolumes) > 0 {
+			for _, volumeName := range debugVolumes {
+				cmd := exec.CommandContext(ctx, "docker", "volume", "rm", volumeName)
+				if err := cmd.Run(); err != nil {
+					r.logVerbose("Warning: failed to remove debug volume %s: %v", volumeName, err)
+				}
+			}
+		}
 	}
 
 	r.backgroundMu.Lock()
@@ -875,6 +942,14 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		step.Background = true
 	}
 
+	// If debug mode is enabled, implicitly run as background container
+	// (debug mode only works with long-running/background containers)
+	debugEnabled := (step.Debug != nil && step.Debug.IsEnabled()) || r.debug
+	if debugEnabled && !step.Background {
+		r.Output("  %s\n", r.styles.Info("Debug mode: running container in background for inspection"))
+		step.Background = true
+	}
+
 	// Extract build step ID from image template if present (for watch mode)
 	// Pattern: {{ steps.<id>.image }} or variants with whitespace
 	var referencedBuildStepID string
@@ -1119,24 +1194,43 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	r.logVerbose("Network: %s", r.networkName)
 	r.logVerbose("Volume mounts: %d", len(volumeMounts))
 	r.logVerbose("Environment variables: %d", len(env))
+
+	// Prepare debug sidecar configuration if enabled
+	var debugImage, debugContainerName string
+	if debugEnabled && step.Background && containerName != "" {
+		debugImage = "nicolaka/netshoot" // default
+		if step.Debug != nil {
+			debugImage = step.Debug.GetImage()
+		}
+		debugContainerName = containerName + "-debug"
+	}
+
 	opts := RunContainerOptions{
-		Name:         containerName,
-		Hostname:     hostname,
-		Network:      r.networkName,
-		Image:        image,
-		Cmd:          cmd,
-		Args:         args,
-		Entrypoint:   entrypoint,
-		Env:          env,
-		WorkDir:      workDir,
-		WorkflowDir:  r.WorkflowDir,
-		VolumeMounts: volumeMounts,
-		TTY:          step.TTY,
-		Remove:       !step.Background,
-		Background:   step.Background,
-		HealthCheck:  healthCheck,
-		PortMappings: portMappings,
-		Force:        r.force,
+		Name:           containerName,
+		Hostname:       hostname,
+		Network:        r.networkName,
+		Image:          image,
+		Cmd:            cmd,
+		Args:           args,
+		Entrypoint:     entrypoint,
+		Env:            env,
+		WorkDir:        workDir,
+		WorkflowDir:    r.WorkflowDir,
+		VolumeMounts:   volumeMounts,
+		TTY:            step.TTY,
+		Remove:         !step.Background,
+		Background:     step.Background,
+		HealthCheck:    healthCheck,
+		PortMappings:   portMappings,
+		Force:          r.force,
+		DebugImage:     debugImage,
+		DebugContainer: debugContainerName,
+		OnContainerStart: func(debugContainer string) {
+			r.registerDebugContainer(debugContainer)
+		},
+		OnVolumeCreate: func(volumeName string) {
+			r.registerDebugVolume(volumeName)
+		},
 	}
 
 	r.logVerbose("Executing docker run command...")

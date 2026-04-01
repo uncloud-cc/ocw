@@ -1,5 +1,8 @@
 sequence:
   - name: Hello Step
-    image: alpine
-    cmd: echo "Hello!"
+    env:
+      NAME: 'Hello debug step!'
+    id: hello
+    image: ubuntu
+    cmd: echo "Hello container fs!" > hello.txt
     debug: true
