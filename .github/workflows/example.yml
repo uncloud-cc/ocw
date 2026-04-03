@@ -1,0 +1,44 @@
+name: Example ocw workflow
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # Example: Build and run container (3_build_and_run.yaml)
+  build-and-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run build and run workflow
+        uses: ./
+        with:
+          working-directory: './examples'
+          args: '-f 3_build_and_run.yaml'
+
+  # Example 1: Run a simple job
+  hello-world:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ocw hello world
+        uses: ./
+        with:
+          args: '-f examples/1_hello_world.yaml'
+
+  # Example 2: Run a specific job from workflow with multiple jobs
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run build job
+        uses: ./
+        with:
+          # Run just the build job from a workflow with multiple jobs
+          args: '-f examples/9_jobs.yaml build'
