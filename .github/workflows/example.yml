@@ -1,4 +1,4 @@
-name: Example ocw workflow
+name: Example ocw workflow (Github Actions)
 
 on:
   push:
@@ -12,9 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Run build and run workflow
         uses: ./
         with:
-          working-directory: './examples'
-          args: '-f 3_build_and_run.yaml'
+          working-directory: ./examples
+          file: 3_build_and_run.yaml
