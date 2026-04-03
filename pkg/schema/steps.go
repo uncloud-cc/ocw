@@ -282,6 +282,12 @@ type RunStep struct {
 	// Requires background: true. Can be bool, glob pattern(s), or full config.
 	Watch *Watch `yaml:"watch,omitempty" json:"watch,omitempty"`
 
+	// === Debug Mode ===
+	// Debug enables a debug sidecar container that shares namespaces with this container.
+	// The sidecar allows inspecting the running container or its filesystem.
+	// Can be a bool (uses default netshoot image) or a config object with custom image.
+	Debug *Debug `yaml:"debug,omitempty" json:"debug,omitempty"`
+
 	// === Environment ===
 	// RunEnv are environment variables (supports both map and array format)
 	// Extends workflow-level env
@@ -483,6 +489,74 @@ func (w *Watch) GetIgnorePatterns() []string {
 		return w.Config.Ignore
 	}
 	return nil
+}
+
+// DebugConfig represents debug sidecar configuration for a step
+type DebugConfig struct {
+	// Image is the debug sidecar image (default: nicolaka/netshoot)
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
+}
+
+// Debug can be a bool or a DebugConfig object
+// - debug: true (uses default netshoot image)
+// - debug: { image: "custom/debug:latest" }
+type Debug struct {
+	Bool   *bool
+	Config *DebugConfig
+}
+
+// UnmarshalYAML implements custom unmarshaling for Debug
+func (d *Debug) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Try bool first
+	var b bool
+	if err := unmarshal(&b); err == nil {
+		d.Bool = &b
+		return nil
+	}
+
+	// Try full config object
+	var c DebugConfig
+	if err := unmarshal(&c); err == nil {
+		d.Config = &c
+		return nil
+	}
+
+	return nil
+}
+
+// MarshalYAML implements custom marshaling for Debug
+func (d Debug) MarshalYAML() (interface{}, error) {
+	if d.Bool != nil {
+		return *d.Bool, nil
+	}
+	if d.Config != nil {
+		return d.Config, nil
+	}
+	return nil, nil
+}
+
+// IsEnabled returns true if debug mode is enabled
+func (d *Debug) IsEnabled() bool {
+	if d == nil {
+		return false
+	}
+	if d.Bool != nil {
+		return *d.Bool
+	}
+	return d.Config != nil
+}
+
+// GetImage returns the debug image to use (default: nicolaka/netshoot)
+func (d *Debug) GetImage() string {
+	const defaultDebugImage = "nicolaka/netshoot"
+
+	if d == nil {
+		return defaultDebugImage
+	}
+	if d.Config != nil && d.Config.Image != "" {
+		return d.Config.Image
+	}
+	return defaultDebugImage
 }
 
 // OutputConfig represents build output configuration

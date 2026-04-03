@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -81,6 +82,8 @@ type Docker struct {
 	styles *Styles
 	// secrets contains sensitive values to mask in output
 	secrets []string
+	// verbose enables detailed logging of docker operations
+	verbose bool
 }
 
 // NetworkCreateOptions holds options for creating a network
@@ -91,8 +94,15 @@ type NetworkCreateOptions struct {
 
 // CreateNetwork creates a Docker network
 func (d *Docker) CreateNetwork(ctx context.Context, opts NetworkCreateOptions) error {
+	if d.verbose {
+		d.Output("  %s Checking if network exists: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.Name))
+	}
+
 	// Check if network already exists
 	if d.NetworkExists(ctx, opts.Name) {
+		if d.verbose {
+			d.Output("  %s Network already exists: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.Name))
+		}
 		// Network exists, silently continue
 		return nil
 	}
@@ -103,14 +113,23 @@ func (d *Docker) CreateNetwork(ctx context.Context, opts NetworkCreateOptions) e
 	}
 
 	args := []string{"network", "create", "--driver", driver, opts.Name}
+	if d.verbose {
+		d.Output("  %s Executing: docker %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(strings.Join(args, " ")))
+	}
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	// Suppress network creation output - not interesting for users
 	cmd.Stdout = nil
 	cmd.Stderr = os.Stderr
 
+	if d.verbose {
+		d.Output("  %s Starting docker network create...\n", d.styles.Dim("[verbose]"))
+	}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create network %s: %w", opts.Name, err)
+	}
+	if d.verbose {
+		d.Output("  %s Network created successfully\n", d.styles.Dim("[verbose]"))
 	}
 
 	return nil
@@ -176,8 +195,18 @@ func (d *Docker) SetSecrets(secrets []string) {
 	d.secrets = secrets
 }
 
+// WithVerbose enables or disables verbose logging
+func (d *Docker) WithVerbose(verbose bool) *Docker {
+	d.verbose = verbose
+	return d
+}
+
 // PullImage pulls an image if not present locally
 func (d *Docker) PullImage(ctx context.Context, imageName string) error {
+	if d.verbose {
+		d.Output("  %s Checking if image exists: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(imageName))
+	}
+
 	// Check if image exists locally
 	if d.ImageExists(ctx, imageName) {
 		d.Output("  %s %s\n", d.styles.Dim("Image exists:"), d.styles.Value(imageName))
@@ -185,6 +214,9 @@ func (d *Docker) PullImage(ctx context.Context, imageName string) error {
 	}
 
 	d.Output("  %s %s\n", d.styles.Info("Pulling:"), d.styles.Value(imageName))
+	if d.verbose {
+		d.Output("  %s Executing: docker pull %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(imageName))
+	}
 
 	// Create prefixed writers for pull output
 	logPrefix := d.styles.LogPrefix()
@@ -195,10 +227,16 @@ func (d *Docker) PullImage(ctx context.Context, imageName string) error {
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 
+	if d.verbose {
+		d.Output("  %s Starting docker pull command...\n", d.styles.Dim("[verbose]"))
+	}
 	if err := cmd.Run(); err != nil {
 		stdoutWriter.Flush()
 		stderrWriter.Flush()
 		return fmt.Errorf("failed to pull image %s: %w", imageName, err)
+	}
+	if d.verbose {
+		d.Output("  %s Docker pull completed successfully\n", d.styles.Dim("[verbose]"))
 	}
 
 	stdoutWriter.Flush()
@@ -217,28 +255,38 @@ type HealthCheckConfig struct {
 
 // RunContainerOptions holds options for running a container
 type RunContainerOptions struct {
-	Name         string             // Container name (optional, auto-generated if empty)
-	Hostname     string             // Hostname for the container (for DNS resolution in network)
-	Network      string             // Network to connect to (empty = default docker network)
-	Image        string             // Image to run
-	Cmd          string             // Command string (will be passed to shell)
-	Args         []string           // Command arguments (if Cmd is empty)
-	Entrypoint   string             // Override entrypoint
-	Env          map[string]string  // Environment variables
-	WorkDir      string             // Working directory inside container
-	WorkflowDir  string             // Host path to mount as /workflow
-	VolumeMounts []VolumeMount      // Additional volume mounts (for explicit host access)
-	TTY          bool               // Allocate TTY
-	Remove       bool               // Remove container after exit (default true for non-background)
-	Background   bool               // Run in background (detached)
-	HealthCheck  *HealthCheckConfig // Health check for background containers
-	PortMappings []PortMapping      // Ports to expose from container to host
-	Force        bool               // Force remove existing container with same name
+	Name             string             // Container name (optional, auto-generated if empty)
+	Hostname         string             // Hostname for the container (for DNS resolution in network)
+	Network          string             // Network to connect to (empty = default docker network)
+	Image            string             // Image to run
+	Cmd              string             // Command string (will be passed to shell)
+	Args             []string           // Command arguments (if Cmd is empty)
+	Entrypoint       string             // Override entrypoint
+	Env              map[string]string  // Environment variables
+	WorkDir          string             // Working directory inside container
+	WorkflowDir      string             // Host path to mount as /workflow
+	VolumeMounts     []VolumeMount      // Additional volume mounts (for explicit host access)
+	TTY              bool               // Allocate TTY
+	Remove           bool               // Remove container after exit (default true for non-background)
+	Background       bool               // Run in background (detached)
+	HealthCheck      *HealthCheckConfig // Health check for background containers
+	PortMappings     []PortMapping      // Ports to expose from container to host
+	Force            bool               // Force remove existing container with same name
+	DebugImage       string             // Debug sidecar image (empty = no debug sidecar)
+	DebugContainer   string             // Debug sidecar container name
+	DebugAttach      bool               // Immediately attach to debug container (for CLI debug mode)
+	DebugCLI         bool               // Whether debug was triggered via CLI flag (affects error handling)
+	OnContainerStart func(string)       // Callback when container starts (for debug sidecar)
+	OnVolumeCreate   func(string)       // Callback when debug volume is created (for filesystem sidecar)
 }
 
 // RunContainer runs a container and waits for it to complete
 func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) error {
 	args := []string{"run"}
+
+	if d.verbose {
+		d.Output("  %s Preparing container: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.Name))
+	}
 
 	// For background containers, we don't use --rm (we manage cleanup ourselves)
 	// For foreground containers, always remove after exit
@@ -256,11 +304,17 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	if containerName != "" && d.ContainerExists(ctx, containerName) {
 		if opts.Force {
 			// Force flag: remove existing container regardless of state
+			if d.verbose {
+				d.Output("  %s Force flag set, removing existing container: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(containerName))
+			}
 			if err := d.RemoveExistingContainer(ctx, containerName); err != nil {
 				return fmt.Errorf("failed to remove existing container: %w", err)
 			}
 		} else if !d.IsContainerRunning(ctx, containerName) {
 			// Auto-cleanup: remove stopped containers automatically
+			if d.verbose {
+				d.Output("  %s Auto-removing stopped container: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(containerName))
+			}
 			d.Output("  %s\n", d.styles.Dim(fmt.Sprintf("Auto-removing stopped container '%s'...", containerName)))
 			if err := d.RemoveContainer(ctx, containerName); err != nil {
 				return fmt.Errorf("failed to remove stopped container: %w", err)
@@ -276,6 +330,9 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	// Network - connect to specified network
 	if opts.Network != "" {
 		args = append(args, "--network", opts.Network)
+		if d.verbose {
+			d.Output("  %s Network: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.Network))
+		}
 	}
 
 	// Hostname - for DNS resolution within the network
@@ -290,11 +347,25 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	// Detached mode for background containers
 	if opts.Background {
 		args = append(args, "-d")
+		if d.verbose {
+			d.Output("  %s Background mode enabled\n", d.styles.Dim("[verbose]"))
+		}
 	}
 
 	// Port mappings
 	for _, pm := range opts.PortMappings {
 		args = append(args, "-p", fmt.Sprintf("%d:%d", pm.HostPort, pm.ContainerPort))
+		if d.verbose {
+			d.Output("  %s Port mapping: %d:%d\n", d.styles.Dim("[verbose]"), pm.HostPort, pm.ContainerPort)
+		}
+	}
+
+	// Enable shareable IPC namespace when debug sidecar will be attached
+	if opts.DebugImage != "" {
+		args = append(args, "--ipc=shareable")
+		if d.verbose {
+			d.Output("  %s IPC: shareable (for debug sidecar)\n", d.styles.Dim("[verbose]"))
+		}
 	}
 
 	// TTY
@@ -303,6 +374,9 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	}
 
 	// Environment variables
+	if d.verbose && len(opts.Env) > 0 {
+		d.Output("  %s Environment variables: %d\n", d.styles.Dim("[verbose]"), len(opts.Env))
+	}
 	for key, value := range opts.Env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", key, value))
 	}
@@ -319,6 +393,9 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 			return fmt.Errorf("failed to get absolute path for workflow dir: %w", err)
 		}
 		args = append(args, "-v", fmt.Sprintf("%s:/workflow:rw", absPath))
+		if d.verbose {
+			d.Output("  %s Mount: %s:/workflow:rw\n", d.styles.Dim("[verbose]"), absPath)
+		}
 	}
 
 	// Mount explicit volumes
@@ -331,11 +408,17 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 			mount.HostPath,
 			mount.ContainerPath,
 			mode))
+		if d.verbose {
+			d.Output("  %s Volume mount: %s:%s:%s\n", d.styles.Dim("[verbose]"), mount.HostPath, mount.ContainerPath, mode)
+		}
 	}
 
 	// Entrypoint override
 	if opts.Entrypoint != "" {
 		args = append(args, "--entrypoint", opts.Entrypoint)
+		if d.verbose {
+			d.Output("  %s Entrypoint: %s\n", d.styles.Dim("[verbose]"), opts.Entrypoint)
+		}
 	}
 
 	// Image
@@ -344,8 +427,18 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	// Command - if Cmd is set, run it through shell
 	if opts.Cmd != "" {
 		args = append(args, "/bin/sh", "-c", opts.Cmd)
+		if d.verbose {
+			d.Output("  %s Command: /bin/sh -c %s\n", d.styles.Dim("[verbose]"), opts.Cmd)
+		}
 	} else if len(opts.Args) > 0 {
 		args = append(args, opts.Args...)
+		if d.verbose {
+			d.Output("  %s Args: %v\n", d.styles.Dim("[verbose]"), opts.Args)
+		}
+	}
+
+	if d.verbose {
+		d.Output("  %s Executing: docker %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(strings.Join(args, " ")))
 	}
 
 	// Create prefixed writers for container output
@@ -360,6 +453,9 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 		cmd.Stdin = os.Stdin
 	}
 
+	if d.verbose {
+		d.Output("  %s Starting docker run command...\n", d.styles.Dim("[verbose]"))
+	}
 	if err := cmd.Run(); err != nil {
 		// Flush any remaining output
 		stdoutWriter.Flush()
@@ -369,18 +465,82 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 		}
 		return fmt.Errorf("failed to run container: %w", err)
 	}
+	if d.verbose {
+		d.Output("  %s Container execution completed\n", d.styles.Dim("[verbose]"))
+	}
 
 	// Flush any remaining output
 	stdoutWriter.Flush()
 	stderrWriter.Flush()
 
+	// For background containers with debug mode, spawn sidecar immediately
+	// We must do this FAST before the target container exits
+	if opts.Background && opts.DebugImage != "" && containerName != "" {
+		d.Output("  %s\n", d.styles.Dim(fmt.Sprintf("Creating debug sidecar (%s)...", opts.DebugImage)))
+
+		// Try to create sidecar immediately - don't wait
+		if err := d.RunDebugSidecar(ctx, DebugSidecarOptions{
+			TargetContainer:  containerName,
+			DebugContainer:   opts.DebugContainer,
+			DebugImage:       opts.DebugImage,
+			Network:          opts.Network,
+			OnContainerStart: opts.OnContainerStart,
+			OnVolumeCreate:   opts.OnVolumeCreate,
+		}); err != nil {
+			d.Output("  %s\n", d.styles.Warning(fmt.Sprintf("Warning: failed to create debug sidecar: %v", err)))
+		} else {
+			d.Output("  %s %s\n", d.styles.Label("Debug container:"), d.styles.Value(opts.DebugContainer))
+			// Call the callback to register the debug container
+			if opts.OnContainerStart != nil {
+				opts.OnContainerStart(opts.DebugContainer)
+			}
+
+			// If immediate attach is requested, drop into the debug container
+			if opts.DebugAttach {
+				d.Output("\n%s\n", d.styles.Info("Attaching to debug container..."))
+				d.Output("  %s %s\n", d.styles.Dim("Target processes:"), d.styles.Value("visible via ps, top, etc."))
+				d.Output("  %s %s\n", d.styles.Dim("Target filesystem:"), d.styles.Value("/proc/1/root/"))
+				d.Output("  %s %s\n", d.styles.Dim("Working directory:"), d.styles.Value("/proc/1/root/workflow/"))
+				d.Output("  %s\n", d.styles.Dim("Press Ctrl+D or type 'exit' to detach\n"))
+
+				// Run interactive shell in the debug container
+				// Explicitly cd to /proc/1/root/workflow before starting bash
+				attachCmd := exec.CommandContext(ctx, "docker", "exec", "-it", opts.DebugContainer, "/bin/bash", "-c",
+					"cd /proc/1/root/workflow 2>/dev/null || cd /target/workflow 2>/dev/null || cd /proc/1/root 2>/dev/null || cd /; exec /bin/bash")
+				attachCmd.Stdin = os.Stdin
+				attachCmd.Stdout = os.Stdout
+				attachCmd.Stderr = os.Stderr
+				if err := attachCmd.Run(); err != nil {
+					// User exited with error code
+					if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() != 0 {
+						d.Output("  %s\n", d.styles.Dim("Debug shell exited with error"))
+					}
+				}
+
+				// In CLI debug mode, terminate workflow gracefully after user exits the debug shell
+				if opts.DebugCLI {
+					d.Output("  %s\n", d.styles.Success("Debug session ended"))
+					return nil // Exit cleanly, not as an error
+				}
+			} else {
+				d.Output("  %s %s\n", d.styles.Dim("Attach with:"), d.styles.Value(fmt.Sprintf("docker exec -it %s /bin/bash", opts.DebugContainer)))
+				d.Output("  %s %s\n", d.styles.Dim("Target filesystem:"), d.styles.Value("/proc/1/root/"))
+				d.Output("  %s %s\n", d.styles.Dim("Working directory:"), d.styles.Value("/proc/1/root/workflow/"))
+				d.Output("  %s\n", d.styles.Dim("Note: Debug sidecar remains accessible even if main container crashes"))
+			}
+		}
+	}
+
 	// For background containers, wait for health check if configured
 	if opts.Background && opts.HealthCheck != nil {
 		d.Output("  %s\n", d.styles.Dim("Waiting for health check..."))
 		if err := d.waitForHealthy(ctx, containerName, opts.HealthCheck); err != nil {
-			// Clean up the container if health check fails
-			d.StopContainer(context.Background(), containerName)
-			d.RemoveContainer(context.Background(), containerName)
+			// Don't clean up if debug sidecar is running - let user inspect
+			if opts.DebugImage == "" {
+				// Clean up the container if health check fails and no debug mode
+				d.StopContainer(context.Background(), containerName)
+				d.RemoveContainer(context.Background(), containerName)
+			}
 			return fmt.Errorf("health check failed: %w", err)
 		}
 		d.Output("  %s\n", d.styles.Success("Container healthy"))
@@ -388,13 +548,14 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 		// No health check, just wait a moment for container to start
 		time.Sleep(500 * time.Millisecond)
 
-		// Verify container is still running
-		if !d.IsContainerRunning(ctx, containerName) {
+		// Verify container is still running (unless debug mode is enabled - then it's ok if it crashes)
+		if !d.IsContainerRunning(ctx, containerName) && opts.DebugImage == "" {
 			// Get logs to help debug
 			logs, _ := d.GetContainerLogs(ctx, containerName, 20)
 			d.RemoveContainer(context.Background(), containerName)
 			return fmt.Errorf("background container exited immediately. Logs:\n%s", logs)
 		}
+
 		d.Output("  %s\n", d.styles.Success("Container started"))
 	}
 
@@ -539,6 +700,10 @@ type BuildImageOptions struct {
 
 // BuildImage builds an image using docker build
 func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string, error) {
+	if d.verbose {
+		d.Output("  %s Starting docker build...\n", d.styles.Dim("[verbose]"))
+	}
+
 	// Resolve the build context path
 	// The context is always relative to the workflow directory (conceptually /workflow)
 	// Examples:
@@ -570,6 +735,10 @@ func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 		return "", fmt.Errorf("failed to resolve context path: %w", err)
 	}
 
+	if d.verbose {
+		d.Output("  %s Build context: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(absContextPath))
+	}
+
 	// Verify context path exists
 	if _, err := os.Stat(absContextPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("build context path does not exist: %s", absContextPath)
@@ -580,10 +749,16 @@ func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 
 	// Add image tag
 	args = append(args, "-t", opts.ImageName)
+	if d.verbose {
+		d.Output("  %s Image tag: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.ImageName))
+	}
 
 	// Add additional tags
 	for _, tag := range opts.Tags {
 		args = append(args, "-t", tag)
+		if d.verbose {
+			d.Output("  %s Additional tag: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(tag))
+		}
 	}
 
 	// Add dockerfile if specified
@@ -611,14 +786,23 @@ func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 		}
 
 		args = append(args, "-f", resolvedDockerfilePath)
+		if d.verbose {
+			d.Output("  %s Dockerfile: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(resolvedDockerfilePath))
+		}
 	}
 
 	// Add target if specified
 	if opts.Target != "" {
 		args = append(args, "--target", opts.Target)
+		if d.verbose {
+			d.Output("  %s Build target: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.Target))
+		}
 	}
 
 	// Add build args
+	if len(opts.BuildArgs) > 0 && d.verbose {
+		d.Output("  %s Build args: %d\n", d.styles.Dim("[verbose]"), len(opts.BuildArgs))
+	}
 	for key, value := range opts.BuildArgs {
 		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
 	}
@@ -629,6 +813,10 @@ func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 	// Add context path
 	args = append(args, absContextPath)
 
+	if d.verbose {
+		d.Output("  %s Executing: docker %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(strings.Join(args, " ")))
+	}
+
 	// Create prefixed writers for build output
 	logPrefix := d.styles.LogPrefix()
 	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, d.secrets)
@@ -638,10 +826,16 @@ func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 
+	if d.verbose {
+		d.Output("  %s Starting docker build command...\n", d.styles.Dim("[verbose]"))
+	}
 	if err := cmd.Run(); err != nil {
 		stdoutWriter.Flush()
 		stderrWriter.Flush()
 		return "", fmt.Errorf("docker build failed: %w", err)
+	}
+	if d.verbose {
+		d.Output("  %s Docker build completed successfully\n", d.styles.Dim("[verbose]"))
 	}
 
 	stdoutWriter.Flush()
@@ -663,8 +857,19 @@ func (d *Docker) GetImageID(ctx context.Context, imageName string) (string, erro
 
 // ImageExists checks if an image exists locally
 func (d *Docker) ImageExists(ctx context.Context, imageName string) bool {
+	if d.verbose {
+		d.Output("  %s Checking image existence: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(imageName))
+	}
 	cmd := exec.CommandContext(ctx, "docker", "image", "inspect", imageName)
-	return cmd.Run() == nil
+	exists := cmd.Run() == nil
+	if d.verbose {
+		if exists {
+			d.Output("  %s Image found: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(imageName))
+		} else {
+			d.Output("  %s Image not found: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(imageName))
+		}
+	}
+	return exists
 }
 
 // maskSecrets replaces all secret values with [secret]
@@ -676,6 +881,352 @@ func (d *Docker) maskSecrets(text string) string {
 		}
 	}
 	return result
+}
+
+// DebugSidecarOptions holds options for creating a debug sidecar container
+type DebugSidecarOptions struct {
+	TargetContainer  string       // Name of the container to debug
+	DebugContainer   string       // Name for the debug sidecar container
+	DebugImage       string       // Image to use for the sidecar (e.g., nicolaka/netshoot)
+	Network          string       // Network to connect to
+	OnContainerStart func(string) // Callback when container starts
+	OnVolumeCreate   func(string) // Callback when volume is created (for filesystem sidecar)
+}
+
+// RunDebugSidecar creates a debug sidecar container for the target container.
+// For running containers: shares namespaces (PID, network, IPC)
+// For stopped containers: mounts the container's filesystem for post-mortem inspection
+func (d *Docker) RunDebugSidecar(ctx context.Context, opts DebugSidecarOptions) error {
+	if d.verbose {
+		d.Output("  %s Creating debug sidecar for container: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.TargetContainer))
+	}
+
+	// Check if target container is running
+	if d.IsContainerRunning(ctx, opts.TargetContainer) {
+		// Container is running - use namespace sharing
+		if d.verbose {
+			d.Output("  %s Target container is running, using namespace sharing\n", d.styles.Dim("[verbose]"))
+		}
+		return d.runNamespaceSidecar(ctx, opts)
+	}
+
+	// Container is not running - use filesystem mount
+	if d.verbose {
+		d.Output("  %s Target container is not running, mounting filesystem\n", d.styles.Dim("[verbose]"))
+	}
+	return d.runFilesystemSidecar(ctx, opts)
+}
+
+// runNamespaceSidecar creates a sidecar sharing namespaces with a running container
+func (d *Docker) runNamespaceSidecar(ctx context.Context, opts DebugSidecarOptions) error {
+	// Get environment variables from the original container
+	envCmd := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{json .Config.Env}}", opts.TargetContainer)
+	envOutput, err := envCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get container environment: %w", err)
+	}
+
+	// Parse environment variables
+	var envVars []string
+	if err := json.Unmarshal(envOutput, &envVars); err != nil {
+		// If parsing fails, continue without env vars
+		if d.verbose {
+			d.Output("  %s Warning: could not parse environment variables: %v\n", d.styles.Dim("[verbose]"), err)
+		}
+	}
+
+	// Get volume mounts from the target container
+	mountsCmd := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{json .Mounts}}", opts.TargetContainer)
+	mountsOutput, err := mountsCmd.Output()
+	if err != nil {
+		if d.verbose {
+			d.Output("  %s Warning: could not get container mounts: %v\n", d.styles.Dim("[verbose]"), err)
+		}
+	}
+
+	// Parse mounts
+	type MountInfo struct {
+		Type        string `json:"Type"`
+		Source      string `json:"Source"`
+		Destination string `json:"Destination"`
+		Mode        string `json:"Mode"`
+		RW          bool   `json:"RW"`
+	}
+	var mounts []MountInfo
+	if err := json.Unmarshal(mountsOutput, &mounts); err != nil {
+		if d.verbose {
+			d.Output("  %s Warning: could not parse container mounts: %v\n", d.styles.Dim("[verbose]"), err)
+		}
+	}
+
+	// Build docker run command with namespace sharing
+	args := []string{
+		"run",
+		"-d",                          // Detached
+		"--name", opts.DebugContainer, // Container name
+		"--pid=container:" + opts.TargetContainer,     // Share PID namespace
+		"--network=container:" + opts.TargetContainer, // Share network namespace
+		"--ipc=container:" + opts.TargetContainer,     // Share IPC namespace
+		// Note: We don't share the mount namespace because that would hide the debug tools.
+		// Instead, we mount the same volumes directly in the sidecar.
+		"--init",               // Use tini for proper signal handling
+		"--cap-add=SYS_PTRACE", // Allow debugging processes
+		"--cap-add=SYS_ADMIN",  // Allow various admin operations
+	}
+
+	// Add environment variables
+	for _, env := range envVars {
+		args = append(args, "-e", env)
+	}
+
+	// Add volume mounts from target container to /target/<destination>
+	// This makes them accessible at predictable paths in the sidecar
+	for _, mount := range mounts {
+		if mount.Type == "bind" || mount.Type == "volume" {
+			mode := "ro"
+			if mount.RW {
+				mode = "rw"
+			}
+			// Mount to /target/<destination> so users can find them easily
+			targetPath := "/target" + mount.Destination
+			args = append(args, "-v", fmt.Sprintf("%s:%s:%s", mount.Source, targetPath, mode))
+			if d.verbose {
+				d.Output("  %s Mounting volume: %s -> %s (%s)\n", d.styles.Dim("[verbose]"), mount.Source, targetPath, mode)
+			}
+		}
+	}
+
+	// Add working directory and image last
+	// Set a safe working directory within the sidecar's filesystem
+	// Users can access target filesystem via /proc/1/root/ after attaching
+	args = append(args,
+		"-w", "/", // Working directory within sidecar's own filesystem
+		opts.DebugImage,     // The debug image
+		"sleep", "infinity", // Keep the container running
+	)
+
+	if d.verbose {
+		d.Output("  %s Executing: docker %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(strings.Join(args, " ")))
+	}
+
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create namespace sidecar: %w\nOutput: %s", err, string(output))
+	}
+
+	// Setup the sidecar environment after creation
+	// Wait a moment for container to be ready, then create symlink and configure shell
+	time.Sleep(100 * time.Millisecond)
+
+	// Retry setup a few times in case container isn't ready yet
+	var setupErr error
+	for i := 0; i < 3; i++ {
+		// Explicitly set HOME=/root to avoid inheriting host's HOME
+		setupCmd := exec.CommandContext(ctx, "docker", "exec", "-e", "HOME=/root", opts.DebugContainer,
+			"sh", "-c", `
+				ln -sf /proc/1/root /target 2>/dev/null || true
+				# Create a .bashrc that cds to the target workflow on startup
+				# Try /proc/1/root/workflow first, fallback to /target/workflow
+				echo 'cd /proc/1/root/workflow 2>/dev/null || cd /target/workflow 2>/dev/null || cd /proc/1/root 2>/dev/null || cd / || true' > /root/.bashrc
+				# Also set PWD env var hint
+				echo 'export PWD=/proc/1/root/workflow' >> /root/.bashrc
+				# Create a helpful motd
+				echo 'Debug sidecar ready!' > /etc/motd
+				echo 'Target filesystem: /proc/1/root/ or /target/' >> /etc/motd
+				echo 'Workflow: /proc/1/root/workflow/' >> /etc/motd
+			`)
+		if setupErr = setupCmd.Run(); setupErr == nil {
+			break
+		}
+		if d.verbose {
+			d.Output("  %s Setup attempt %d failed: %v\n", d.styles.Dim("[verbose]"), i+1, setupErr)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if d.verbose {
+		if setupErr != nil {
+			d.Output("  %s Warning: could not setup shell environment: %v\n", d.styles.Dim("[verbose]"), setupErr)
+		} else {
+			d.Output("  %s Debug sidecar environment configured\n", d.styles.Dim("[verbose]"))
+		}
+	}
+
+	if d.verbose {
+		d.Output("  %s Namespace sidecar created successfully\n", d.styles.Dim("[verbose]"))
+	}
+
+	return nil
+}
+
+// runFilesystemSidecar creates a sidecar mounting a stopped container's filesystem
+func (d *Docker) runFilesystemSidecar(ctx context.Context, opts DebugSidecarOptions) error {
+	// Create a named volume for the exported filesystem
+	volumeName := fmt.Sprintf("ocw-debug-%s-%d", opts.TargetContainer, time.Now().UnixNano())
+
+	if d.verbose {
+		d.Output("  %s Creating debug volume %s...\n", d.styles.Dim("[verbose]"), d.styles.Dim(volumeName))
+	}
+
+	// Create the volume
+	createCmd := exec.CommandContext(ctx, "docker", "volume", "create", volumeName)
+	if output, err := createCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create debug volume: %w\nOutput: %s", err, string(output))
+	}
+
+	// Register volume for cleanup
+	if opts.OnVolumeCreate != nil {
+		opts.OnVolumeCreate(volumeName)
+	}
+
+	// Export container filesystem and pipe into a temporary container that copies it to the volume
+	if d.verbose {
+		d.Output("  %s Exporting container filesystem...\n", d.styles.Dim("[verbose]"))
+	}
+
+	// Create a temp container to populate the volume
+	tempContainer := fmt.Sprintf("ocw-debug-temp-%d", time.Now().UnixNano())
+	tempCmd := exec.CommandContext(ctx, "docker", "run", "-d", "--name", tempContainer,
+		"-v", volumeName+":/debugfs",
+		"alpine", "sleep", "infinity")
+	if output, err := tempCmd.CombinedOutput(); err != nil {
+		// Clean up volume
+		exec.CommandContext(ctx, "docker", "volume", "rm", volumeName).Run()
+		return fmt.Errorf("failed to create temp container: %w\nOutput: %s", err, string(output))
+	}
+
+	// Export and extract
+	exportCmd := exec.CommandContext(ctx, "docker", "export", opts.TargetContainer)
+	extractCmd := exec.CommandContext(ctx, "docker", "exec", "-i", tempContainer, "tar", "-xf", "-", "-C", "/debugfs")
+
+	exportPipe, _ := exportCmd.StdoutPipe()
+	extractCmd.Stdin = exportPipe
+
+	if err := extractCmd.Start(); err != nil {
+		dockerRm(ctx, tempContainer)
+		exec.CommandContext(ctx, "docker", "volume", "rm", volumeName).Run()
+		return fmt.Errorf("failed to start extract: %w", err)
+	}
+
+	if err := exportCmd.Run(); err != nil {
+		dockerRm(ctx, tempContainer)
+		exec.CommandContext(ctx, "docker", "volume", "rm", volumeName).Run()
+		return fmt.Errorf("failed to export container: %w", err)
+	}
+
+	if err := extractCmd.Wait(); err != nil {
+		dockerRm(ctx, tempContainer)
+		exec.CommandContext(ctx, "docker", "volume", "rm", volumeName).Run()
+		return fmt.Errorf("failed to extract container filesystem: %w", err)
+	}
+
+	// Remove temp container
+	dockerRm(ctx, tempContainer)
+
+	if d.verbose {
+		d.Output("  %s Container filesystem exported to volume\n", d.styles.Dim("[verbose]"))
+	}
+
+	// Get all mounts from the original container
+	mountsCmd := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{json .Mounts}}", opts.TargetContainer)
+	mountsOutput, err := mountsCmd.Output()
+	if err != nil {
+		exec.CommandContext(ctx, "docker", "volume", "rm", volumeName).Run()
+		return fmt.Errorf("failed to get container mounts: %w", err)
+	}
+
+	// Get environment variables from the original container
+	envCmd := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{json .Config.Env}}", opts.TargetContainer)
+	envOutput, err := envCmd.Output()
+	if err != nil {
+		exec.CommandContext(ctx, "docker", "volume", "rm", volumeName).Run()
+		return fmt.Errorf("failed to get container environment: %w", err)
+	}
+
+	// Parse environment variables
+	var envVars []string
+	if err := json.Unmarshal(envOutput, &envVars); err != nil {
+		// If parsing fails, continue without env vars
+		if d.verbose {
+			d.Output("  %s Warning: could not parse environment variables: %v\n", d.styles.Dim("[verbose]"), err)
+		}
+	}
+
+	// Create a sidecar that mounts the debug volume
+	args := []string{
+		"run",
+		"-d",                          // Detached
+		"--name", opts.DebugContainer, // Container name
+		"--init",                         // Use tini for proper signal handling
+		"-v", volumeName + ":/target:ro", // Mount exported filesystem as read-only
+	}
+
+	// Add environment variables
+	for _, env := range envVars {
+		args = append(args, "-e", env)
+	}
+
+	if opts.Network != "" {
+		args = append(args, "--network", opts.Network)
+	}
+
+	// Re-mount bind mounts from the original container inside /target
+	// This recreates the full container filesystem view for debugging
+	var mounts []struct {
+		Type        string `json:"Type"`
+		Source      string `json:"Source"`
+		Destination string `json:"Destination"`
+		Mode        string `json:"Mode"`
+	}
+	if err := json.Unmarshal(mountsOutput, &mounts); err == nil {
+		for _, mount := range mounts {
+			if mount.Type == "bind" || mount.Type == "volume" {
+				mode := "ro"
+				if strings.Contains(mount.Mode, "rw") {
+					mode = "rw"
+				}
+
+				// Mount inside /target to recreate full container filesystem view
+				targetPath := filepath.Join("/target", mount.Destination)
+				args = append(args, "-v", fmt.Sprintf("%s:%s:%s", mount.Source, targetPath, mode))
+
+				if d.verbose {
+					d.Output("  %s Re-mounting %s -> %s (%s)\n", d.styles.Dim("[verbose]"), d.styles.Dim(mount.Source), d.styles.Dim(targetPath), d.styles.Dim(mode))
+				}
+			}
+		}
+	}
+
+	// Add image and command last
+	args = append(args,
+		"-w", "/target", // Set working directory to /target
+		opts.DebugImage,     // The debug image
+		"sleep", "infinity", // Keep the container running
+	)
+
+	if d.verbose {
+		d.Output("  %s Executing: docker %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(strings.Join(args, " ")))
+	}
+
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmdOutput, err := cmd.CombinedOutput()
+	if err != nil {
+		// Clean up volume on failure
+		exec.CommandContext(ctx, "docker", "volume", "rm", volumeName).Run()
+		return fmt.Errorf("failed to create filesystem sidecar: %w\nOutput: %s", err, string(cmdOutput))
+	}
+
+	if d.verbose {
+		d.Output("  %s Filesystem sidecar created successfully\n", d.styles.Dim("[verbose]"))
+	}
+
+	return nil
+}
+
+// dockerRm removes a container, ignoring errors
+func dockerRm(ctx context.Context, name string) {
+	exec.CommandContext(ctx, "docker", "rm", "-f", name).Run()
 }
 
 // StreamLogs streams container logs (for long-running containers)

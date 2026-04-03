@@ -1,0 +1,46 @@
+schemaVersion: "0.1.0"
+name: Debug Mode Example
+description: Demonstrates the debug mode feature for container inspection
+
+jobs:
+  debug-basic:
+    name: Basic Debug Mode
+    description: Simple debug mode with default netshoot image
+    sequence:
+      - name: Web Server with Debug
+        id: webserver
+        image: nginx:alpine
+        background: true
+        expose: 8080
+        healthCheck:
+          cmd: curl -f http://localhost:80/ || exit 1
+        debug: true
+
+  debug-custom-image:
+    name: Custom Debug Image
+    description: Debug mode with a custom debug image
+    sequence:
+      - name: App with Custom Debug
+        id: app
+        image: python:3.11-slim
+        cmd: python -m http.server 8000
+        background: true
+        expose: 8000
+        debug:
+          image: busybox:latest
+
+  debug-cli:
+    name: CLI Debug Mode
+    description: Run with --debug flag to enable debug sidecars for all containers
+    parallel:
+      - name: Service A
+        id: svc-a
+        image: alpine
+        cmd: sleep infinity
+        background: true
+      
+      - name: Service B
+        id: svc-b
+        image: alpine
+        cmd: sleep infinity
+        background: true

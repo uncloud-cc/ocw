@@ -1,0 +1,16 @@
+sequence:
+  - name: Hello Step
+    env:
+      NAME: 'Hello debug step!'
+    id: hello
+    image: ubuntu
+    cmd: echo "Hello container fs!" > hello.txt
+    debug: true
+
+  - name: Hello long-running step
+    id: long-running
+    image: node:25-alpine
+    cmd: echo "<h1>Hello from container!</h1>" > index.html && npx serve -p 8888
+    expose: 8888
+    background: true
+    debug: true
