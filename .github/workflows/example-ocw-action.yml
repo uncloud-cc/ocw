@@ -1,0 +1,104 @@
+name: 'Example: Run OCW Workflow'
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # Example: Build and run container (3_build_and_run.yaml)
+  build-and-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run build and run workflow
+        uses: ./
+        with:
+          working-directory: './examples'
+          file: '3_build_and_run.yaml'
+
+  # Example 1: Run a simple job
+  hello-world:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run ocw hello world
+        uses: ./
+        with:
+          file: 'examples/1_hello_world.yaml'
+
+  # Example 2: Run a specific job from workflow with multiple jobs
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run build job
+        uses: ./
+        with:
+          file: 'examples/9_jobs.yaml'
+          job: 'build'
+
+  # Example 3: Run with verbose mode
+  run-with-verbose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run with verbose output
+        uses: ./
+        with:
+          file: 'examples/1_hello_world.yaml'
+          verbose: 'true'
+
+  # Example 4: Run in a subdirectory with job name
+  run-in-subdirectory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run ocw in project directory
+        uses: ./
+        with:
+          working-directory: './examples/nodejs'
+          job: 'dev'  # Run the 'dev' job
+
+  # Example 5: Validate workflow without running
+  validate-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate workflow
+        uses: ./
+        with:
+          file: 'examples/3_build_and_run.yaml'
+          validate: 'true'
+
+  # Example 6: Full CI/CD pipeline with env file
+  ci-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build
+        uses: ./
+        with:
+          job: 'build'
+          verbose: 'true'
+          
+      - name: Test
+        uses: ./
+        with:
+          job: 'test'
+          verbose: 'true'
+          
+      - name: Deploy (only on main)
+        if: github.ref == 'refs/heads/main'
+        uses: ./
+        with:
+          job: 'deploy'

@@ -10,13 +10,38 @@ inputs:
     description: 'Version of ocw to install (e.g., v0.1.0, latest)'
     required: false
     default: 'latest'
-  args:
-    description: 'Arguments to pass to ocw CLI (e.g., "build", "test -verbose", "-f workflow.yaml build")'
-    required: true
+  file:
+    description: 'Workflow file(s) to run (-f flag)'
+    required: false
+  env:
+    description: 'Environment file to load (-e flag)'
+    required: false
+  job:
+    description: 'Job name to run (e.g., build, test, dev)'
+    required: false
+  show-secrets:
+    description: 'Show secret values in output (-show-secrets flag)'
+    required: false
+    default: 'false'
+  force:
+    description: 'Force remove existing containers (-force flag)'
+    required: false
+    default: 'false'
+  verbose:
+    description: 'Enable verbose logging (-verbose flag)'
+    required: false
+    default: 'false'
+  validate:
+    description: 'Validate workflow without running (-validate flag)'
+    required: false
+    default: 'false'
   working-directory:
     description: 'Working directory to run ocw in'
     required: false
     default: '.'
+  args:
+    description: 'Additional raw arguments (for advanced use cases)'
+    required: false
 
 runs:
   using: 'composite'
@@ -91,5 +116,40 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
-        echo "Running: ocw ${{ inputs.args }}"
-        ocw ${{ inputs.args }}
+        # Build command from individual inputs
+        CMD="ocw"
+        
+        if [ -n "${{ inputs.file }}" ]; then
+          CMD="$CMD -f ${{ inputs.file }}"
+        fi
+        
+        if [ -n "${{ inputs.env }}" ]; then
+          CMD="$CMD -e ${{ inputs.env }}"
+        fi
+        
+        if [ "${{ inputs.show-secrets }}" = "true" ]; then
+          CMD="$CMD -show-secrets"
+        fi
+        
+        if [ "${{ inputs.force }}" = "true" ]; then
+          CMD="$CMD -force"
+        fi
+        
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          CMD="$CMD -verbose"
+        fi
+        
+        if [ "${{ inputs.validate }}" = "true" ]; then
+          CMD="$CMD -validate"
+        fi
+        
+        if [ -n "${{ inputs.job }}" ]; then
+          CMD="$CMD ${{ inputs.job }}"
+        fi
+        
+        if [ -n "${{ inputs.args }}" ]; then
+          CMD="$CMD ${{ inputs.args }}"
+        fi
+        
+        echo "Running: $CMD"
+        eval "$CMD"

@@ -6,7 +6,7 @@ Run [Open Container Workflow (ocw)](https://github.com/uncloud-cc/ocw) - a conta
 
 - **Zero configuration** - Docker is pre-installed on GitHub runners
 - **Automatic platform detection** - Downloads the correct binary for your runner OS/architecture
-- **Simple interface** - Just pass ocw CLI arguments directly
+- **Individual CLI arguments** - Pass flags as separate inputs, just like running locally
 - **Version pinning** - Use specific versions or always get latest
 - **Fast setup** - Composite action installs in seconds
 
@@ -27,8 +27,15 @@ jobs:
       
       - name: Run OCW workflow
         uses: uncloud-cc/ocw@main
-        with:
-          args: '.'  # Run all workflows in current directory
+```
+
+### Run a Specific Workflow File
+
+```yaml
+- name: Run workflow file
+  uses: uncloud-cc/ocw@main
+  with:
+    file: 'workflow.yaml'
 ```
 
 ### Run a Specific Job
@@ -37,31 +44,62 @@ jobs:
 - name: Build
   uses: uncloud-cc/ocw@main
   with:
-    args: 'build'  # Run the 'build' job from discovered workflows
+    job: 'build'
 
 - name: Test
   uses: uncloud-cc/ocw@main
   with:
-    args: 'test'   # Run the 'test' job
+    job: 'test'
 ```
 
-### Specify a Workflow File
+### Combine File and Job
 
 ```yaml
-- name: Run specific workflow
+- name: Build from specific file
   uses: uncloud-cc/ocw@main
   with:
-    args: '-f my-workflow.yaml build'
+    file: 'ci.yaml'
+    job: 'build'
 ```
 
-### Use a Specific Version
+### Enable Verbose Output
 
 ```yaml
-- name: Run with specific ocw version
+- name: Run with verbose output
   uses: uncloud-cc/ocw@main
   with:
-    version: 'v0.1.0'  # Pin to specific version
-    args: 'build'
+    file: 'workflow.yaml'
+    verbose: 'true'
+```
+
+### Use Environment File
+
+```yaml
+- name: Run with env file
+  uses: uncloud-cc/ocw@main
+  with:
+    file: 'workflow.yaml'
+    env: '.env.production'
+```
+
+### Force Remove Existing Containers
+
+```yaml
+- name: Force run
+  uses: uncloud-cc/ocw@main
+  with:
+    job: 'dev'
+    force: 'true'
+```
+
+### Validate Without Running
+
+```yaml
+- name: Validate workflow
+  uses: uncloud-cc/ocw@main
+  with:
+    file: 'workflow.yaml'
+    validate: 'true'
 ```
 
 ### Run in a Subdirectory
@@ -71,16 +109,27 @@ jobs:
   uses: uncloud-cc/ocw@main
   with:
     working-directory: './my-project'
-    args: '.'
+    job: 'build'
 ```
 
-### Enable Verbose Output
+### Use a Specific Version
 
 ```yaml
-- name: Run with verbose output
+- name: Run with specific ocw version
   uses: uncloud-cc/ocw@main
   with:
-    args: '-verbose build'
+    version: 'v0.1.0'  # Pin to specific version
+    file: 'workflow.yaml'
+```
+
+### Show Secrets (Not Recommended for CI)
+
+```yaml
+- name: Debug with secrets
+  uses: uncloud-cc/ocw@main
+  with:
+    file: 'workflow.yaml'
+    show-secrets: 'true'
 ```
 
 ## Inputs
@@ -88,8 +137,15 @@ jobs:
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `version` | Version of ocw to install (e.g., `v0.1.0`, `latest`) | No | `latest` |
-| `args` | Arguments to pass to ocw CLI | Yes | - |
+| `file` | Workflow file(s) to run (-f flag) | No | - |
+| `env` | Environment file to load (-e flag) | No | - |
+| `job` | Job name to run (e.g., `build`, `test`, `dev`) | No | - |
+| `show-secrets` | Show secret values in output | No | `false` |
+| `force` | Force remove existing containers | No | `false` |
+| `verbose` | Enable verbose logging | No | `false` |
+| `validate` | Validate workflow without running | No | `false` |
 | `working-directory` | Working directory to run ocw in | No | `.` |
+| `args` | Additional raw arguments (for advanced use cases) | No | - |
 
 ## Supported Platforms
 
@@ -109,8 +165,9 @@ Windows runners are not supported (ocw requires Docker, which works differently 
 
 1. Downloads the ocw binary from [GitHub Releases](https://github.com/uncloud-cc/ocw/releases)
 2. Installs it to `~/.local/bin/`
-3. Runs ocw with your specified arguments
-4. Propagates exit codes - workflow failures will fail the GitHub Action
+3. Builds the command from individual inputs
+4. Runs ocw with your specified arguments
+5. Propagates exit codes - workflow failures will fail the GitHub Action
 
 ## Requirements
 
@@ -120,10 +177,11 @@ Windows runners are not supported (ocw requires Docker, which works differently 
 ## Example Workflows
 
 See [`.github/workflows/example-ocw-action.yml`](.github/workflows/example-ocw-action.yml) for complete examples including:
-- Running simple jobs
-- Running specific workflow files
+- Running workflow files
+- Running specific jobs
 - Multi-step CI/CD pipelines
 - Running in subdirectories
+- Validation
 
 ## License
 
