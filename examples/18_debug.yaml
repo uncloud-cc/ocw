@@ -6,6 +6,7 @@ sequence:
     image: ubuntu
     cmd: echo "Hello container fs!" > hello.txt
     debug: true
+
   - name: Hello long-running step
     id: long-running
     image: node:25-alpine
