@@ -1,5 +1,7 @@
 # Open Container Workflow (ocw)
 
+> ocw is currently in a pre-production state. Feel free to test it out and share your feedback 🎉
+
 Container-native workflows for local development & CI/CD.
 
 ## Example
