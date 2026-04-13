@@ -1,32 +1,14 @@
 # Open Container Workflow (ocw)
 
-> ocw is currently in a pre-production state. Feel free to test it out and share your feedback 🎉
+Container-native CI/CD workflows that actually run locally (and vice-versa).
 
-Container-native workflows for local development & CI/CD.
+## Why?
 
-## Example
-```javascript
-// server.js
-require('http').createServer((_, res) => {
-  res.end(`Hello world!`);
-}).listen(8888);
-```
+Github Actions, Gitlab piplines, CircleCI jobs - they all lack one thing: It's ~~hard~~ impossible to fully run them locally.
 
-```yaml
-# hello.yaml
-name: Hello World
-sequence:
-  - id: server
-    image: node:25-alpine
-    cmd: node server.js
+ocw uses the power of containers (run anywhere) to allow you to build local development workflows that run inside containers. Once you want to run these workflows in CI/CD, simply use our Github Action.
 
-    # Make it a hot-reloading dev server
-    background: true
-    watch: true
-    expose: 8888
-```
-
-Run the workflow with `ocw hello.yaml` and play around with `server.js` to see hot-reloading in action ✨
+👉🏻 Checkout our [Github Actions example](./tutorials/advanced.md#use-in-github-actions) or see the Github Action README for details
 
 ## Install
 ```bash

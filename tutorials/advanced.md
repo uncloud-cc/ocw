@@ -641,3 +641,28 @@ ocw dev     # Start dev server at http://localhost:1313
 ocw build   # Build static site to ./website/dist
 ocw deploy  # Push to S3
 ```
+
+## Use in Github Actions
+ocw was designed to be a container-native replacement for Github Actions.
+
+In this example, we'll see how you can trigger your locally running ocw workflows in Github Actions:
+
+```yaml
+# .github/workflows/example.yaml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run OCW workflow
+        uses: uncloud-cc/ocw@main
+        with:
+          working-directory: ./examples
+          file: 3_build_and_run.yaml
+```
+
