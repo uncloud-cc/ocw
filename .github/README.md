@@ -1,4 +1,4 @@
-# OCW GitHub Action
+# ocw GitHub Action
 
 Run [Open Container Workflow (ocw)](https://github.com/uncloud-cc/ocw) - a container-native workflow engine for CI/CD - directly in your GitHub Actions workflows.
 
@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Run OCW workflow
         uses: uncloud-cc/ocw@main
 ```

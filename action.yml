@@ -2,7 +2,7 @@ name: 'ocw'
 description: 'Run Open Container Workflow (ocw) - container-native workflows for CI/CD'
 author: 'uncloud-cc'
 branding:
-  icon: 'play-circle'
+  icon: 'anchor'
   color: 'blue'
 
 inputs:
@@ -118,38 +118,38 @@ runs:
       run: |
         # Build command from individual inputs
         CMD="ocw"
-        
+
         if [ -n "${{ inputs.file }}" ]; then
           CMD="$CMD -f ${{ inputs.file }}"
         fi
-        
+
         if [ -n "${{ inputs.env }}" ]; then
           CMD="$CMD -e ${{ inputs.env }}"
         fi
-        
+
         if [ "${{ inputs.show-secrets }}" = "true" ]; then
           CMD="$CMD -show-secrets"
         fi
-        
+
         if [ "${{ inputs.force }}" = "true" ]; then
           CMD="$CMD -force"
         fi
-        
+
         if [ "${{ inputs.verbose }}" = "true" ]; then
           CMD="$CMD -verbose"
         fi
-        
+
         if [ "${{ inputs.validate }}" = "true" ]; then
           CMD="$CMD -validate"
         fi
-        
+
         if [ -n "${{ inputs.job }}" ]; then
           CMD="$CMD ${{ inputs.job }}"
         fi
-        
+
         if [ -n "${{ inputs.args }}" ]; then
           CMD="$CMD ${{ inputs.args }}"
         fi
-        
+
         echo "Running: $CMD"
         eval "$CMD"
