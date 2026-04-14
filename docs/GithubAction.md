@@ -4,7 +4,8 @@ Run [Open Container Workflow (ocw)](https://github.com/uncloud-cc/ocw) - a conta
 
 ## Features
 
-- **Zero configuration** - Docker is pre-installed on GitHub runners
+- **Zero configuration** - Automatically checks out code and runs your workflow
+- **Docker is pre-installed** - On GitHub-hosted runners
 - **Automatic platform detection** - Downloads the correct binary for your runner OS/architecture
 - **Individual CLI arguments** - Pass flags as separate inputs, just like running locally
 - **Version pinning** - Use specific versions or always get latest
@@ -13,6 +14,8 @@ Run [Open Container Workflow (ocw)](https://github.com/uncloud-cc/ocw) - a conta
 ## Usage
 
 ### Basic Example
+
+The action automatically checks out your repository by default, so you can run ocw with zero configuration:
 
 ```yaml
 name: CI
@@ -23,10 +26,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Run OCW workflow
         uses: uncloud-cc/ocw@main
+```
+
+### Disable Automatic Checkout
+
+If you need custom checkout options (e.g., submodules, specific ref, sparse checkout), set `checkout: 'false'` and add your own checkout step:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+    submodules: recursive
+
+- name: Run OCW workflow
+  uses: uncloud-cc/ocw@main
+  with:
+    checkout: 'false'
+    file: 'ci.yaml'
 ```
 
 ### Run a Specific Workflow File
@@ -146,6 +164,7 @@ jobs:
 | `validate` | Validate workflow without running | No | `false` |
 | `working-directory` | Working directory to run ocw in | No | `.` |
 | `args` | Additional raw arguments (for advanced use cases) | No | - |
+| `checkout` | Checkout the repository before running (set to `'false'` for custom checkout options) | No | `'true'` |
 
 ## Supported Platforms
 
@@ -163,16 +182,18 @@ Windows runners are not supported (ocw requires Docker, which works differently 
 
 ## How It Works
 
-1. Downloads the ocw binary from [GitHub Releases](https://github.com/uncloud-cc/ocw/releases)
-2. Installs it to `~/.local/bin/`
-3. Builds the command from individual inputs
-4. Runs ocw with your specified arguments
-5. Propagates exit codes - workflow failures will fail the GitHub Action
+1. **Checks out your repository** (if `checkout: 'true'` - the default)
+2. Downloads the ocw binary from [GitHub Releases](https://github.com/uncloud-cc/ocw/releases)
+3. Installs it to `~/.local/bin/`
+4. Builds the command from individual inputs
+5. Runs ocw with your specified arguments
+6. Propagates exit codes - workflow failures will fail the GitHub Action
 
 ## Requirements
 
 - GitHub-hosted runner with Docker (Linux runners only)
 - Workflow files in your repository
+- Repository checkout (automatic by default, or manual with `checkout: 'false'`)
 
 ## Example Workflows
 

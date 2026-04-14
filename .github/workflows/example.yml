@@ -8,12 +8,27 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Basic example - uses automatic checkout
   build-and-run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - name: Run build and run workflow
         uses: ./
         with:
           working-directory: ./examples
           file: 3_build_and_run.yaml
+
+  # Advanced example - custom checkout with submodules
+  custom-checkout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Run workflow with custom checkout
+        uses: ./
+        with:
+          checkout: 'false'
+          file: 1_hello_world.yaml

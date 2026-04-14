@@ -42,10 +42,18 @@ inputs:
   args:
     description: 'Additional raw arguments (for advanced use cases)'
     required: false
+  checkout:
+    description: 'Checkout the repository before running ocw (set to "false" if you need custom checkout options)'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
   steps:
+    - name: Checkout repository
+      if: inputs.checkout == 'true'
+      uses: actions/checkout@v4
+
     - name: Download and install ocw
       shell: bash
       run: |
