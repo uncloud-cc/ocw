@@ -858,8 +858,9 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 
 	// If watch mode is enabled, implicitly run as background container
 	// (watch mode only works with long-running/background containers)
-	if step.Watch != nil && step.Watch.IsEnabled() && !step.Background {
-		step.Background = true
+	background := step.Background
+	if step.Watch != nil && step.Watch.IsEnabled() && !background {
+		background = true
 	}
 
 	// Extract build step ID from image template if present (for watch mode)
@@ -945,7 +946,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 
 	// Print styled step header
 	extra := map[string]string{"Image": image}
-	if step.Background {
+	if background {
 		extra["Mode"] = "background"
 	}
 	r.Output(r.styles.StepBox(name, "run", extra))
@@ -1000,7 +1001,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	containerName := ""
 	hostname := ""
 
-	if step.Background {
+	if background {
 		if step.ID != "" {
 			// ID provided - use it as hostname for DNS resolution
 			containerName = fmt.Sprintf("ocw-%s-%s", r.runID, step.ID)
@@ -1119,8 +1120,8 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		WorkflowDir:  r.WorkflowDir,
 		VolumeMounts: volumeMounts,
 		TTY:          step.TTY,
-		Remove:       !step.Background,
-		Background:   step.Background,
+		Remove:       !background,
+		Background:   background,
 		HealthCheck:  healthCheck,
 		PortMappings: portMappings,
 		Force:        r.force,
@@ -1133,12 +1134,12 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	r.logVerbose("Container execution completed")
 
 	// Track background containers for cleanup
-	if step.Background && containerName != "" {
+	if background && containerName != "" {
 		r.registerBackgroundContainer(containerName)
 	}
 
 	// Set up watch mode if enabled
-	if step.Background && step.Watch != nil && step.Watch.IsEnabled() {
+	if background && step.Watch != nil && step.Watch.IsEnabled() {
 		r.initReloader()
 
 		wc := &WatchedContainer{
@@ -1166,7 +1167,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	}
 
 	// Parse step outputs (if step has an ID and is not a background container)
-	if stepID != "" && !step.Background {
+	if stepID != "" && !background {
 		if err := r.parseStepOutputs(stepID); err != nil {
 			r.Output("  %s\n", r.styles.Warning(fmt.Sprintf("Warning: failed to parse step outputs: %v", err)))
 		}
