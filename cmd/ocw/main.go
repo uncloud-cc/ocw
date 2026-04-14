@@ -139,7 +139,7 @@ func run() error {
 		}
 
 		// Find the job in workflow files
-		workflowPath, err = findJobInFiles(files, jobName)
+		workflowPath, err = findJobInFiles(files, jobName, *verbose)
 		if err != nil {
 			return err
 		}
@@ -248,10 +248,13 @@ func discoverWorkflowFiles(dir string) ([]string, error) {
 }
 
 // findJobInFiles searches for a job name across multiple workflow files
-func findJobInFiles(files []string, jobName string) (string, error) {
+func findJobInFiles(files []string, jobName string, verbose bool) (string, error) {
 	for _, file := range files {
 		ocw, err := schema.ParseFile(file)
 		if err != nil {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "Warning: failed to parse %s: %v\n", file, err)
+			}
 			continue // Skip files that fail to parse
 		}
 
