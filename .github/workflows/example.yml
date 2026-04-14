@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run build and run workflow
-        uses: ./
+        uses: uncloud-cc/ocw@main
         with:
           working-directory: ./examples
           file: 3_build_and_run.yaml
@@ -28,7 +28,7 @@ jobs:
           submodules: recursive
 
       - name: Run workflow with custom checkout
-        uses: ./
+        uses: uncloud-cc/ocw@main
         with:
           checkout: 'false'
-          file: 1_hello_world.yaml
+          file: examples/1_hello_world.yaml
