@@ -1,4 +1,4 @@
-.PHONY: build install schema test clean
+.PHONY: build install schema test clean lint
 
 # Build the CLI binary locally
 build:
@@ -18,6 +18,10 @@ schema:
 # Run tests
 test:
 	go test ./...
+
+# Run linter
+lint:
+	golangci-lint run ./...
 
 # Clean build artifacts
 clean:
