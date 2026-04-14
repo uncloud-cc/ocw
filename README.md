@@ -4,6 +4,8 @@ Container-native CI/CD workflows that (actually) run locally.
 
 > ocw is currently in a pre-production state (see [launch roadmap](https://github.com/orgs/uncloud-cc/projects/6/views/1)). Feel free to test it out and share your feedback 🎉
 
+> Looking for the `uncloud-cc/ocw` Github Actions docs? 👉🏻 [Here](/docs/GithubAction.md)
+
 ## Why?
 
 Github Actions, Gitlab piplines, CircleCI jobs - they all lack one thing: It's ~~hard~~ impossible to fully run them locally.
@@ -13,7 +15,7 @@ At the same time, many of the CI/CD workflows you rely on in the cloud, are also
 ocw does both: Through a simple YAML syntax, it's easy to build local development workflows that you can also run inside Github Actions as your CI/CD pipelines.
 
 ## Examples
-**Run a local development server**
+### Run a local development server
 ```javascript
 // server.js
 require('http').createServer((_, res) => {
@@ -36,7 +38,7 @@ sequence:
 
 Run the workflow with `ocw hello.yaml` and play around with `server.js` to see hot-reloading in action ✨
 
-**Test & Build a container in Github Actions**
+### Test & Build a container in Github Actions
 ```yaml
 # ci.yaml
 env:
