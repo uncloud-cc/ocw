@@ -1,5 +1,7 @@
 package schema
 
+import "fmt"
+
 // StepBase contains common fields for all step types
 type StepBase struct {
 	// Name is a human readable name for the step
@@ -871,7 +873,7 @@ func (s *Step) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return nil
 	}
 
-	return nil
+	return fmt.Errorf("unrecognized step type: must have one of 'run', 'build', 'push', 'parallel', or 'workflow' field")
 }
 
 // MarshalYAML implements custom marshaling for Step
