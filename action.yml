@@ -1,0 +1,163 @@
+name: 'ocw'
+description: 'Run Open Container Workflow (ocw) - container-native workflows for CI/CD'
+author: 'uncloud-cc'
+branding:
+  icon: 'anchor'
+  color: 'blue'
+
+inputs:
+  version:
+    description: 'Version of ocw to install (e.g., v0.1.0, latest)'
+    required: false
+    default: 'latest'
+  file:
+    description: 'Workflow file(s) to run (-f flag)'
+    required: false
+  env:
+    description: 'Environment file to load (-e flag)'
+    required: false
+  job:
+    description: 'Job name to run (e.g., build, test, dev)'
+    required: false
+  show-secrets:
+    description: 'Show secret values in output (-show-secrets flag)'
+    required: false
+    default: 'false'
+  force:
+    description: 'Force remove existing containers (-force flag)'
+    required: false
+    default: 'false'
+  verbose:
+    description: 'Enable verbose logging (-verbose flag)'
+    required: false
+    default: 'false'
+  validate:
+    description: 'Validate workflow without running (-validate flag)'
+    required: false
+    default: 'false'
+  working-directory:
+    description: 'Working directory to run ocw in'
+    required: false
+    default: '.'
+  args:
+    description: 'Additional raw arguments (for advanced use cases)'
+    required: false
+  checkout:
+    description: 'Checkout the repository before running ocw (set to "false" if you need custom checkout options)'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      if: inputs.checkout == 'true'
+      uses: actions/checkout@v4
+
+    - name: Download and install ocw
+      shell: bash
+      run: |
+        set -e
+
+        # Determine version
+        VERSION="${{ inputs.version }}"
+        if [ "$VERSION" = "latest" ]; then
+          echo "Fetching latest release..."
+          VERSION=$(curl -s https://api.github.com/repos/uncloud-cc/ocw/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "Error: Could not determine latest version"
+            exit 1
+          fi
+          echo "Latest version: $VERSION"
+        fi
+
+        # Determine OS and architecture
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+
+        case "$ARCH" in
+          x86_64) ARCH="x86_64" ;;
+          amd64) ARCH="x86_64" ;;
+          arm64) ARCH="arm64" ;;
+          aarch64) ARCH="arm64" ;;
+          i386) ARCH="i386" ;;
+          *) echo "Error: Unsupported architecture: $ARCH"; exit 1 ;;
+        esac
+
+        case "$OS" in
+          linux) OS="Linux" ;;
+          darwin) OS="Darwin" ;;
+          *) echo "Error: Unsupported OS: $OS"; exit 1 ;;
+        esac
+
+        # Construct download URL
+        FILENAME="ocw_${OS}_${ARCH}.tar.gz"
+        URL="https://github.com/uncloud-cc/ocw/releases/download/${VERSION}/${FILENAME}"
+
+        echo "Downloading ocw ${VERSION} for ${OS}_${ARCH}..."
+        echo "URL: $URL"
+
+        # Download and extract
+        TEMP_DIR=$(mktemp -d)
+        curl -fsSL "$URL" -o "$TEMP_DIR/ocw.tar.gz"
+        tar -xzf "$TEMP_DIR/ocw.tar.gz" -C "$TEMP_DIR"
+
+        # Move binary to a location in PATH
+        mkdir -p "$HOME/.local/bin"
+        mv "$TEMP_DIR/ocw" "$HOME/.local/bin/ocw"
+        chmod +x "$HOME/.local/bin/ocw"
+
+        # Cleanup
+        rm -rf "$TEMP_DIR"
+
+        # Add to PATH for this step
+        export PATH="$HOME/.local/bin:$PATH"
+
+        # Verify installation
+        echo "ocw installed successfully:"
+        ocw --version
+
+        # Persist PATH for subsequent steps
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Run ocw
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        # Build command from individual inputs
+        CMD="ocw"
+
+        if [ -n "${{ inputs.file }}" ]; then
+          CMD="$CMD -f ${{ inputs.file }}"
+        fi
+
+        if [ -n "${{ inputs.env }}" ]; then
+          CMD="$CMD -e ${{ inputs.env }}"
+        fi
+
+        if [ "${{ inputs.show-secrets }}" = "true" ]; then
+          CMD="$CMD -show-secrets"
+        fi
+
+        if [ "${{ inputs.force }}" = "true" ]; then
+          CMD="$CMD -force"
+        fi
+
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          CMD="$CMD -verbose"
+        fi
+
+        if [ "${{ inputs.validate }}" = "true" ]; then
+          CMD="$CMD -validate"
+        fi
+
+        if [ -n "${{ inputs.job }}" ]; then
+          CMD="$CMD ${{ inputs.job }}"
+        fi
+
+        if [ -n "${{ inputs.args }}" ]; then
+          CMD="$CMD ${{ inputs.args }}"
+        fi
+
+        echo "Running: $CMD"
+        eval "$CMD"

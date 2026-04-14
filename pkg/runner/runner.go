@@ -61,6 +61,8 @@ type Runner struct {
 	EnvFile string
 	// Output function for logging (defaults to fmt.Printf)
 	Output func(format string, args ...any)
+	// Verbose enables detailed logging of internal operations
+	verbose bool
 	// Docker client for container operations
 	docker *Docker
 	// builtImages tracks images built by build steps (keyed by step ID)
@@ -131,6 +133,13 @@ func NewRunner(workflowDir string) *Runner {
 	}
 }
 
+// WithVerbose enables or disables verbose logging
+func (r *Runner) WithVerbose(verbose bool) *Runner {
+	r.verbose = verbose
+	r.docker.WithVerbose(verbose)
+	return r
+}
+
 // WithEnvFile sets a custom .env file path
 func (r *Runner) WithEnvFile(envFile string) *Runner {
 	r.EnvFile = envFile
@@ -147,6 +156,13 @@ func (r *Runner) WithShowSecrets(show bool) *Runner {
 func (r *Runner) WithForce(force bool) *Runner {
 	r.force = force
 	return r
+}
+
+// logVerbose logs a message if verbose mode is enabled
+func (r *Runner) logVerbose(format string, args ...any) {
+	if r.verbose {
+		r.Output("  %s %s\n", r.styles.Dim("[verbose]"), r.styles.Dim(fmt.Sprintf(format, args...)))
+	}
 }
 
 // initReloader initializes the reloader if not already done
@@ -509,8 +525,11 @@ func (r *Runner) parseStepOutputs(stepID string) error {
 
 // Run executes an OCW workflow (direct flow control, not a specific job)
 func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
+	r.logVerbose("Starting workflow execution")
+
 	// Generate unique run ID for this workflow execution (enables parallel runs)
 	r.runID = gonanoid.Must(5)
+	r.logVerbose("Generated run ID: %s", r.runID)
 
 	// Ensure background containers and outputs are cleaned up when done
 	defer r.cleanupBackgroundContainers()
@@ -521,11 +540,13 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 	r.Output("  %s %s\n\n", r.styles.Label("Directory:"), r.styles.Value(r.WorkflowDir))
 
 	// Load .env file if present (passing workflow env as defaults)
+	r.logVerbose("Loading environment variables")
 	if err := r.loadDotEnv(ocw.Env); err != nil {
 		return fmt.Errorf("failed to load .env: %w", err)
 	}
 
 	// Set up template context with workflow metadata
+	r.logVerbose("Setting up template context")
 	r.templateCtx.Workflow = WorkflowMeta{
 		Name:        string(ocw.Name),
 		Description: string(ocw.Description),
@@ -533,6 +554,7 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 	}
 
 	// Create outputs directory for step outputs
+	r.logVerbose("Creating outputs directory: %s", r.outputsDir())
 	if err := r.ensureOutputsDir(); err != nil {
 		return fmt.Errorf("failed to create outputs directory: %w", err)
 	}
@@ -542,19 +564,26 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 	if workflowName == "" {
 		workflowName = "workflow"
 	}
+	r.logVerbose("Creating job network for workflow: %s", workflowName)
 	if err := r.createJobNetwork(ctx, workflowName); err != nil {
 		return fmt.Errorf("failed to create network: %w", err)
 	}
+	r.logVerbose("Network created: %s", r.networkName)
 
 	// Resolve workflow volumes
-	if err := r.resolveVolumes(ocw.Volumes); err != nil {
-		return fmt.Errorf("failed to resolve volumes: %w", err)
+	if len(ocw.Volumes) > 0 {
+		r.logVerbose("Resolving %d workflow volumes", len(ocw.Volumes))
+		if err := r.resolveVolumes(ocw.Volumes); err != nil {
+			return fmt.Errorf("failed to resolve volumes: %w", err)
+		}
 	}
 
 	start := time.Now()
+	flowType := ocw.GetFlowType()
+	r.logVerbose("Starting flow execution (type: %s)", flowType)
 
 	var err error
-	switch ocw.GetFlowType() {
+	switch flowType {
 	case "parallel":
 		err = r.runParallel(ctx, ocw.Parallel)
 	case "sequence":
@@ -574,6 +603,7 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 	}
 
 	duration := time.Since(start)
+	r.logVerbose("Workflow execution completed in %v", duration.Round(time.Millisecond))
 	r.Output(r.styles.CompletionBanner(string(ocw.Name), duration.Round(time.Millisecond).String(), err == nil))
 
 	// If there are background containers running and no errors, wait for interrupt
@@ -586,8 +616,11 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 
 // RunJob executes a specific job from an OCW workflow
 func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) error {
+	r.logVerbose("Starting job execution: %s", jobName)
+
 	// Generate unique run ID for this workflow execution (enables parallel runs)
 	r.runID = gonanoid.Must(5)
+	r.logVerbose("Generated run ID: %s", r.runID)
 
 	// Ensure background containers and outputs are cleaned up when done
 	defer r.cleanupBackgroundContainers()
@@ -608,11 +641,13 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 	r.Output("  %s %s\n\n", r.styles.Label("Directory:"), r.styles.Value(r.WorkflowDir))
 
 	// Load .env file if present (passing workflow env as defaults)
+	r.logVerbose("Loading environment variables")
 	if err := r.loadDotEnv(ocw.Env); err != nil {
 		return fmt.Errorf("failed to load .env: %w", err)
 	}
 
 	// Set up template context with workflow and job metadata
+	r.logVerbose("Setting up template context")
 	r.templateCtx.Workflow = WorkflowMeta{
 		Name:        string(ocw.Name),
 		Description: string(ocw.Description),
@@ -625,18 +660,24 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 	}
 
 	// Create outputs directory for step outputs
+	r.logVerbose("Creating outputs directory: %s", r.outputsDir())
 	if err := r.ensureOutputsDir(); err != nil {
 		return fmt.Errorf("failed to create outputs directory: %w", err)
 	}
 
 	// Create a network for this job (enables container-to-container communication)
+	r.logVerbose("Creating job network for job: %s", jobName)
 	if err := r.createJobNetwork(ctx, jobName); err != nil {
 		return fmt.Errorf("failed to create network: %w", err)
 	}
+	r.logVerbose("Network created: %s", r.networkName)
 
 	// Resolve workflow volumes
-	if err := r.resolveVolumes(ocw.Volumes); err != nil {
-		return fmt.Errorf("failed to resolve volumes: %w", err)
+	if len(ocw.Volumes) > 0 {
+		r.logVerbose("Resolving %d workflow volumes", len(ocw.Volumes))
+		if err := r.resolveVolumes(ocw.Volumes); err != nil {
+			return fmt.Errorf("failed to resolve volumes: %w", err)
+		}
 	}
 
 	// Store job-level volumes for step resolution
@@ -644,14 +685,17 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 
 	// Apply job-level watch config to background steps that don't have explicit watch
 	if job.Watch != nil && job.Watch.IsEnabled() {
+		r.logVerbose("Applying job-level watch configuration")
 		r.applyJobWatchToSteps(job.Parallel, job.Watch)
 		r.applyJobWatchToSteps(job.Sequence, job.Watch)
 	}
 
 	start := time.Now()
+	flowType := job.GetFlowType()
+	r.logVerbose("Starting job flow execution (type: %s)", flowType)
 
 	var err error
-	switch job.GetFlowType() {
+	switch flowType {
 	case "parallel":
 		err = r.runParallel(ctx, job.Parallel)
 	case "sequence":
@@ -673,6 +717,7 @@ func (r *Runner) RunJob(ctx context.Context, ocw *schema.OCW, jobName string) er
 	}
 
 	duration := time.Since(start)
+	r.logVerbose("Job execution completed in %v", duration.Round(time.Millisecond))
 	r.Output(r.styles.CompletionBanner(displayName, duration.Round(time.Millisecond).String(), err == nil))
 
 	// If there are background containers running and no errors, wait for interrupt
@@ -835,11 +880,15 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		}
 	}
 
+	r.logVerbose("Starting run step: %s", name)
+	r.logVerbose("Original image: %s", step.Image)
+
 	// Interpolate template expressions in image name
 	image, err := r.templateCtx.Interpolate(step.Image)
 	if err != nil {
 		return fmt.Errorf("failed to interpolate image: %w", err)
 	}
+	r.logVerbose("Interpolated image: %s", image)
 
 	// Interpolate command
 	cmd := step.Cmd
@@ -848,6 +897,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		if err != nil {
 			return fmt.Errorf("failed to interpolate cmd: %w", err)
 		}
+		r.logVerbose("Interpolated command: %s", cmd)
 	}
 
 	// Interpolate entrypoint
@@ -872,6 +922,7 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		if err != nil {
 			return fmt.Errorf("failed to interpolate workdir: %w", err)
 		}
+		r.logVerbose("Working directory: %s", workdir)
 	}
 
 	// Interpolate platform
@@ -900,9 +951,11 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	r.Output(r.styles.StepBox(name, "run", extra))
 
 	// Pull the image first
+	r.logVerbose("Pulling/checking image: %s", image)
 	if err := r.docker.PullImage(ctx, image); err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
+	r.logVerbose("Image ready: %s", image)
 
 	// Build environment variables map and interpolate values
 	// Start with workflow-level env vars, then merge step-level (step overrides workflow)
@@ -1049,6 +1102,10 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 	}
 
 	// Run the container
+	r.logVerbose("Running container with name: %s, hostname: %s", containerName, hostname)
+	r.logVerbose("Network: %s", r.networkName)
+	r.logVerbose("Volume mounts: %d", len(volumeMounts))
+	r.logVerbose("Environment variables: %d", len(env))
 	opts := RunContainerOptions{
 		Name:         containerName,
 		Hostname:     hostname,
@@ -1069,9 +1126,11 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		Force:        r.force,
 	}
 
+	r.logVerbose("Executing docker run command...")
 	if err := r.docker.RunContainer(ctx, opts); err != nil {
 		return fmt.Errorf("container execution failed: %w", err)
 	}
+	r.logVerbose("Container execution completed")
 
 	// Track background containers for cleanup
 	if step.Background && containerName != "" {
@@ -1160,6 +1219,11 @@ func (r *Runner) runBuildStep(ctx context.Context, step *schema.BuildStep) error
 	// Print styled step header
 	r.Output(r.styles.StepBox(name, "build", map[string]string{"Image": imageName}))
 
+	r.logVerbose("Starting build step: %s", name)
+	r.logVerbose("Building image: %s", imageName)
+	r.logVerbose("Context: %s", context)
+	r.logVerbose("Dockerfile: %s", dockerfile)
+
 	// Interpolate build args
 	buildArgs := make(map[string]string)
 	for k, v := range step.Build.BuildArgs {
@@ -1169,6 +1233,7 @@ func (r *Runner) runBuildStep(ctx context.Context, step *schema.BuildStep) error
 		}
 		buildArgs[k] = interpolatedValue
 	}
+	r.logVerbose("Build args: %d", len(buildArgs))
 
 	// Interpolate tags
 	tags, err := r.templateCtx.InterpolateSlice(step.Build.Tags)
@@ -1181,6 +1246,7 @@ func (r *Runner) runBuildStep(ctx context.Context, step *schema.BuildStep) error
 	if err != nil {
 		return fmt.Errorf("failed to resolve volumes: %w", err)
 	}
+	r.logVerbose("Volume mounts resolved: %d", len(volumeMounts))
 
 	// Build the image
 	opts := BuildImageOptions{
@@ -1194,10 +1260,12 @@ func (r *Runner) runBuildStep(ctx context.Context, step *schema.BuildStep) error
 		VolumeMounts: volumeMounts,
 	}
 
+	r.logVerbose("Starting docker build...")
 	builtImage, err := r.docker.BuildImage(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("build failed: %w", err)
 	}
+	r.logVerbose("Build completed successfully: %s", builtImage)
 
 	// Register the built image if step has an ID
 	// This makes it available as ${{ steps.<id>.image }}

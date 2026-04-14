@@ -69,14 +69,3 @@ release:
     ---
 
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
-
-brews:
-  - name: ocw
-    repository:
-      owner: uncloud-cc
-      name: homebrew-tap
-    homepage: "https://github.com/uncloud-cc/ocw"
-    description: "Container-native workflows for local development & CI/CD"
-    license: "MIT"
-    test: |
-      system "#{bin}/ocw", "--version"

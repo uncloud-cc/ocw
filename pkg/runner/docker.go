@@ -81,6 +81,8 @@ type Docker struct {
 	styles *Styles
 	// secrets contains sensitive values to mask in output
 	secrets []string
+	// verbose enables detailed logging of docker operations
+	verbose bool
 }
 
 // NetworkCreateOptions holds options for creating a network
@@ -176,8 +178,18 @@ func (d *Docker) SetSecrets(secrets []string) {
 	d.secrets = secrets
 }
 
+// WithVerbose enables or disables verbose logging
+func (d *Docker) WithVerbose(verbose bool) *Docker {
+	d.verbose = verbose
+	return d
+}
+
 // PullImage pulls an image if not present locally
 func (d *Docker) PullImage(ctx context.Context, imageName string) error {
+	if d.verbose {
+		d.Output("  %s Checking if image exists: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(imageName))
+	}
+
 	// Check if image exists locally
 	if d.ImageExists(ctx, imageName) {
 		d.Output("  %s %s\n", d.styles.Dim("Image exists:"), d.styles.Value(imageName))
@@ -185,6 +197,9 @@ func (d *Docker) PullImage(ctx context.Context, imageName string) error {
 	}
 
 	d.Output("  %s %s\n", d.styles.Info("Pulling:"), d.styles.Value(imageName))
+	if d.verbose {
+		d.Output("  %s Executing: docker pull %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(imageName))
+	}
 
 	// Create prefixed writers for pull output
 	logPrefix := d.styles.LogPrefix()
@@ -195,10 +210,16 @@ func (d *Docker) PullImage(ctx context.Context, imageName string) error {
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 
+	if d.verbose {
+		d.Output("  %s Starting docker pull command...\n", d.styles.Dim("[verbose]"))
+	}
 	if err := cmd.Run(); err != nil {
 		stdoutWriter.Flush()
 		stderrWriter.Flush()
 		return fmt.Errorf("failed to pull image %s: %w", imageName, err)
+	}
+	if d.verbose {
+		d.Output("  %s Docker pull completed successfully\n", d.styles.Dim("[verbose]"))
 	}
 
 	stdoutWriter.Flush()
@@ -240,6 +261,10 @@ type RunContainerOptions struct {
 func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) error {
 	args := []string{"run"}
 
+	if d.verbose {
+		d.Output("  %s Preparing container: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.Name))
+	}
+
 	// For background containers, we don't use --rm (we manage cleanup ourselves)
 	// For foreground containers, always remove after exit
 	if !opts.Background {
@@ -256,11 +281,17 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	if containerName != "" && d.ContainerExists(ctx, containerName) {
 		if opts.Force {
 			// Force flag: remove existing container regardless of state
+			if d.verbose {
+				d.Output("  %s Force flag set, removing existing container: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(containerName))
+			}
 			if err := d.RemoveExistingContainer(ctx, containerName); err != nil {
 				return fmt.Errorf("failed to remove existing container: %w", err)
 			}
 		} else if !d.IsContainerRunning(ctx, containerName) {
 			// Auto-cleanup: remove stopped containers automatically
+			if d.verbose {
+				d.Output("  %s Auto-removing stopped container: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(containerName))
+			}
 			d.Output("  %s\n", d.styles.Dim(fmt.Sprintf("Auto-removing stopped container '%s'...", containerName)))
 			if err := d.RemoveContainer(ctx, containerName); err != nil {
 				return fmt.Errorf("failed to remove stopped container: %w", err)
@@ -276,6 +307,9 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	// Network - connect to specified network
 	if opts.Network != "" {
 		args = append(args, "--network", opts.Network)
+		if d.verbose {
+			d.Output("  %s Network: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.Network))
+		}
 	}
 
 	// Hostname - for DNS resolution within the network
@@ -290,11 +324,17 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	// Detached mode for background containers
 	if opts.Background {
 		args = append(args, "-d")
+		if d.verbose {
+			d.Output("  %s Background mode enabled\n", d.styles.Dim("[verbose]"))
+		}
 	}
 
 	// Port mappings
 	for _, pm := range opts.PortMappings {
 		args = append(args, "-p", fmt.Sprintf("%d:%d", pm.HostPort, pm.ContainerPort))
+		if d.verbose {
+			d.Output("  %s Port mapping: %d:%d\n", d.styles.Dim("[verbose]"), pm.HostPort, pm.ContainerPort)
+		}
 	}
 
 	// TTY
@@ -303,6 +343,9 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	}
 
 	// Environment variables
+	if d.verbose && len(opts.Env) > 0 {
+		d.Output("  %s Environment variables: %d\n", d.styles.Dim("[verbose]"), len(opts.Env))
+	}
 	for key, value := range opts.Env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", key, value))
 	}
@@ -319,6 +362,9 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 			return fmt.Errorf("failed to get absolute path for workflow dir: %w", err)
 		}
 		args = append(args, "-v", fmt.Sprintf("%s:/workflow:rw", absPath))
+		if d.verbose {
+			d.Output("  %s Mount: %s:/workflow:rw\n", d.styles.Dim("[verbose]"), absPath)
+		}
 	}
 
 	// Mount explicit volumes
@@ -331,11 +377,17 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 			mount.HostPath,
 			mount.ContainerPath,
 			mode))
+		if d.verbose {
+			d.Output("  %s Volume mount: %s:%s:%s\n", d.styles.Dim("[verbose]"), mount.HostPath, mount.ContainerPath, mode)
+		}
 	}
 
 	// Entrypoint override
 	if opts.Entrypoint != "" {
 		args = append(args, "--entrypoint", opts.Entrypoint)
+		if d.verbose {
+			d.Output("  %s Entrypoint: %s\n", d.styles.Dim("[verbose]"), opts.Entrypoint)
+		}
 	}
 
 	// Image
@@ -344,8 +396,18 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 	// Command - if Cmd is set, run it through shell
 	if opts.Cmd != "" {
 		args = append(args, "/bin/sh", "-c", opts.Cmd)
+		if d.verbose {
+			d.Output("  %s Command: /bin/sh -c %s\n", d.styles.Dim("[verbose]"), opts.Cmd)
+		}
 	} else if len(opts.Args) > 0 {
 		args = append(args, opts.Args...)
+		if d.verbose {
+			d.Output("  %s Args: %v\n", d.styles.Dim("[verbose]"), opts.Args)
+		}
+	}
+
+	if d.verbose {
+		d.Output("  %s Executing: docker %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(strings.Join(args, " ")))
 	}
 
 	// Create prefixed writers for container output
@@ -360,6 +422,9 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 		cmd.Stdin = os.Stdin
 	}
 
+	if d.verbose {
+		d.Output("  %s Starting docker run command...\n", d.styles.Dim("[verbose]"))
+	}
 	if err := cmd.Run(); err != nil {
 		// Flush any remaining output
 		stdoutWriter.Flush()
@@ -368,6 +433,9 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 			return fmt.Errorf("container exited with code %d", exitErr.ExitCode())
 		}
 		return fmt.Errorf("failed to run container: %w", err)
+	}
+	if d.verbose {
+		d.Output("  %s Container execution completed\n", d.styles.Dim("[verbose]"))
 	}
 
 	// Flush any remaining output
@@ -539,6 +607,10 @@ type BuildImageOptions struct {
 
 // BuildImage builds an image using docker build
 func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string, error) {
+	if d.verbose {
+		d.Output("  %s Starting docker build...\n", d.styles.Dim("[verbose]"))
+	}
+
 	// Resolve the build context path
 	// The context is always relative to the workflow directory (conceptually /workflow)
 	// Examples:
@@ -570,6 +642,10 @@ func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 		return "", fmt.Errorf("failed to resolve context path: %w", err)
 	}
 
+	if d.verbose {
+		d.Output("  %s Build context: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(absContextPath))
+	}
+
 	// Verify context path exists
 	if _, err := os.Stat(absContextPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("build context path does not exist: %s", absContextPath)
@@ -580,10 +656,16 @@ func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 
 	// Add image tag
 	args = append(args, "-t", opts.ImageName)
+	if d.verbose {
+		d.Output("  %s Image tag: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.ImageName))
+	}
 
 	// Add additional tags
 	for _, tag := range opts.Tags {
 		args = append(args, "-t", tag)
+		if d.verbose {
+			d.Output("  %s Additional tag: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(tag))
+		}
 	}
 
 	// Add dockerfile if specified
@@ -611,14 +693,23 @@ func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 		}
 
 		args = append(args, "-f", resolvedDockerfilePath)
+		if d.verbose {
+			d.Output("  %s Dockerfile: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(resolvedDockerfilePath))
+		}
 	}
 
 	// Add target if specified
 	if opts.Target != "" {
 		args = append(args, "--target", opts.Target)
+		if d.verbose {
+			d.Output("  %s Build target: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(opts.Target))
+		}
 	}
 
 	// Add build args
+	if len(opts.BuildArgs) > 0 && d.verbose {
+		d.Output("  %s Build args: %d\n", d.styles.Dim("[verbose]"), len(opts.BuildArgs))
+	}
 	for key, value := range opts.BuildArgs {
 		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
 	}
@@ -629,6 +720,10 @@ func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 	// Add context path
 	args = append(args, absContextPath)
 
+	if d.verbose {
+		d.Output("  %s Executing: docker %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(strings.Join(args, " ")))
+	}
+
 	// Create prefixed writers for build output
 	logPrefix := d.styles.LogPrefix()
 	stdoutWriter := newPrefixWriter(os.Stdout, logPrefix, d.secrets)
@@ -638,10 +733,16 @@ func (d *Docker) BuildImage(ctx context.Context, opts BuildImageOptions) (string
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 
+	if d.verbose {
+		d.Output("  %s Starting docker build command...\n", d.styles.Dim("[verbose]"))
+	}
 	if err := cmd.Run(); err != nil {
 		stdoutWriter.Flush()
 		stderrWriter.Flush()
 		return "", fmt.Errorf("docker build failed: %w", err)
+	}
+	if d.verbose {
+		d.Output("  %s Docker build completed successfully\n", d.styles.Dim("[verbose]"))
 	}
 
 	stdoutWriter.Flush()
@@ -663,8 +764,19 @@ func (d *Docker) GetImageID(ctx context.Context, imageName string) (string, erro
 
 // ImageExists checks if an image exists locally
 func (d *Docker) ImageExists(ctx context.Context, imageName string) bool {
+	if d.verbose {
+		d.Output("  %s Checking image existence: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(imageName))
+	}
 	cmd := exec.CommandContext(ctx, "docker", "image", "inspect", imageName)
-	return cmd.Run() == nil
+	exists := cmd.Run() == nil
+	if d.verbose {
+		if exists {
+			d.Output("  %s Image found: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(imageName))
+		} else {
+			d.Output("  %s Image not found: %s\n", d.styles.Dim("[verbose]"), d.styles.Dim(imageName))
+		}
+	}
+	return exists
 }
 
 // maskSecrets replaces all secret values with [secret]
