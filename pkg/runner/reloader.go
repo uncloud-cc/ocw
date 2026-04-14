@@ -190,26 +190,6 @@ func (r *Reloader) translateContainerPathToHost(containerPath string, mounts []V
 }
 
 // sanitizeNameForHostname converts a name to a valid hostname (lowercase, hyphens instead of spaces)
-func sanitizeNameForHostname(name string) string {
-	result := make([]byte, 0, len(name))
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if c >= 'a' && c <= 'z' {
-			result = append(result, c)
-		} else if c >= 'A' && c <= 'Z' {
-			// Convert uppercase to lowercase
-			result = append(result, c+32)
-		} else if (c >= '0' && c <= '9') || c == '-' || c == '_' {
-			result = append(result, c)
-		} else if c == ' ' {
-			result = append(result, '-')
-		}
-	}
-	if len(result) == 0 {
-		return "container"
-	}
-	return string(result)
-}
 
 // handleChange handles a file change event for a container
 func (r *Reloader) handleChange(stepID string, changedFile string) {
@@ -402,7 +382,7 @@ func (r *Reloader) justReload(ctx context.Context, wc *WatchedContainer) error {
 	if hostname == "" {
 		// Extract hostname from container name (format: ocw-<runid>-<hostname>)
 		// For now, use the step name sanitized
-		hostname = sanitizeNameForHostname(wc.StepName)
+		hostname = SanitizeName(wc.StepName)
 	}
 
 	opts := RunContainerOptions{

@@ -287,7 +287,7 @@ func (r *Runner) registerBackgroundContainer(name string) {
 
 // createJobNetwork creates a network for the current job
 func (r *Runner) createJobNetwork(ctx context.Context, jobName string) error {
-	r.networkName = fmt.Sprintf("ocw-%s-%d", sanitizeName(jobName), time.Now().UnixNano())
+	r.networkName = fmt.Sprintf("ocw-%s-%d", SanitizeName(jobName), time.Now().UnixNano())
 	// Network creation is silent - only show errors
 	return r.docker.CreateNetwork(ctx, NetworkCreateOptions{
 		Name:   r.networkName,
@@ -560,7 +560,7 @@ func (r *Runner) Run(ctx context.Context, ocw *schema.OCW) error {
 	}
 
 	// Create a network for this workflow (enables container-to-container communication)
-	workflowName := sanitizeName(ocw.Name)
+	workflowName := SanitizeName(ocw.Name)
 	if workflowName == "" {
 		workflowName = "workflow"
 	}
@@ -1009,14 +1009,14 @@ func (r *Runner) runRunStep(ctx context.Context, step *schema.RunStep) error {
 		} else if name != "" && name != "run" {
 			// No ID, but has a name - try to use it as hostname if valid
 			if isValidHostname(name) {
-				containerName = fmt.Sprintf("ocw-%s-%s", r.runID, sanitizeName(name))
+				containerName = fmt.Sprintf("ocw-%s-%s", r.runID, SanitizeName(name))
 				hostname = name
 				r.Output("  %s %s\n", r.styles.Label("Hostname:"), r.styles.Value(hostname))
 			} else {
 				// Name is not a valid hostname - only allow this for watch mode
 				if step.Watch != nil && step.Watch.IsEnabled() {
 					// For watch mode, sanitize the name to make it a valid hostname
-					sanitized := sanitizeName(name)
+					sanitized := SanitizeName(name)
 					containerName = fmt.Sprintf("ocw-%s-%s", r.runID, sanitized)
 					hostname = sanitized
 					r.Output("  %s %s\n", r.styles.Label("Hostname:"), r.styles.Value(hostname))
@@ -1349,26 +1349,6 @@ func indexOf(s string, c byte) int {
 }
 
 // sanitizeName creates a safe container name from a step name
-func sanitizeName(name string) string {
-	result := make([]byte, 0, len(name))
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if c >= 'a' && c <= 'z' {
-			result = append(result, c)
-		} else if c >= 'A' && c <= 'Z' {
-			// Convert uppercase to lowercase
-			result = append(result, c+32)
-		} else if (c >= '0' && c <= '9') || c == '-' || c == '_' {
-			result = append(result, c)
-		} else if c == ' ' {
-			result = append(result, '-')
-		}
-	}
-	if len(result) == 0 {
-		return "container"
-	}
-	return string(result)
-}
 
 // isValidHostname checks if a string is a valid hostname for container networking
 // Valid hostnames: lowercase letters, numbers, hyphens; must start with letter; max 63 chars
