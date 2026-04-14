@@ -426,3 +426,112 @@ func TestValidationErrors_ToError(t *testing.T) {
 		}
 	})
 }
+
+func TestOCW_Validate_ParallelStep(t *testing.T) {
+	tests := []struct {
+		name      string
+		yaml      string
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "valid parallel step",
+			yaml: `
+jobs:
+  test:
+    parallel:
+      - image: alpine
+        run: echo test1
+      - image: alpine
+        run: echo test2
+`,
+			wantErr: false,
+		},
+		{
+			name: "empty parallel",
+			yaml: `
+jobs:
+  test:
+    parallel: []
+`,
+			wantErr:   true,
+			errSubstr: "must have one of",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ocw, err := Parse([]byte(tt.yaml))
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+
+			err = ocw.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if tt.wantErr && tt.errSubstr != "" {
+				if !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("Validate() error = %v, want substring %q", err, tt.errSubstr)
+				}
+			}
+		})
+	}
+}
+
+func TestOCW_Validate_SequenceStep(t *testing.T) {
+	tests := []struct {
+		name      string
+		yaml      string
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "valid sequence step",
+			yaml: `
+jobs:
+  test:
+    sequence:
+      - image: alpine
+        run: echo test1
+      - image: alpine
+        run: echo test2
+`,
+			wantErr: false,
+		},
+		{
+			name: "empty sequence",
+			yaml: `
+jobs:
+  test:
+    sequence: []
+`,
+			wantErr:   true,
+			errSubstr: "must have one of",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ocw, err := Parse([]byte(tt.yaml))
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+
+			err = ocw.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if tt.wantErr && tt.errSubstr != "" {
+				if !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("Validate() error = %v, want substring %q", err, tt.errSubstr)
+				}
+			}
+		})
+	}
+}
+

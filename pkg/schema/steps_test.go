@@ -391,3 +391,66 @@ func TestStepOrSteps_UnmarshalYAML(t *testing.T) {
 func float64Ptr(f float64) *float64 {
 	return &f
 }
+
+func TestStepOrSteps_MarshalYAML(t *testing.T) {
+	tests := []struct {
+		name     string
+		sos      *StepOrSteps
+		expected string
+	}{
+		{
+			name: "single step",
+			sos: &StepOrSteps{
+				Single: &Step{
+					RunStep: &RunStep{
+						Image: "alpine",
+						Cmd:   "echo hello",
+					},
+				},
+			},
+			expected: "value:\n  name: \"\"\n  image: alpine\n  cmd: echo hello\n",
+		},
+		{
+			name: "multiple steps",
+			sos: &StepOrSteps{
+				Multiple: []Step{
+					{
+						RunStep: &RunStep{
+							Image: "alpine",
+							Cmd:   "echo step1",
+						},
+					},
+					{
+						RunStep: &RunStep{
+							Image: "alpine",
+							Cmd:   "echo step2",
+						},
+					},
+				},
+			},
+			expected: "value:\n- name: \"\"\n  image: alpine\n  cmd: echo step1\n- name: \"\"\n  image: alpine\n  cmd: echo step2\n",
+		},
+		{
+			name:     "nil value",
+			sos:      nil,
+			expected: "value: null\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj := struct {
+				Value *StepOrSteps `yaml:"value"`
+			}{
+				Value: tt.sos,
+			}
+			data, err := yaml.Marshal(&obj)
+			if err != nil {
+				t.Fatalf("MarshalYAML() error = %v", err)
+			}
+			if string(data) != tt.expected {
+				t.Errorf("MarshalYAML() = %q; want %q", string(data), tt.expected)
+			}
+		})
+	}
+}

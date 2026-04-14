@@ -168,3 +168,71 @@ jobs:
 		t.Error("Expected step volume to have readonly: true")
 	}
 }
+
+func TestVolumeRefs_MarshalYAML(t *testing.T) {
+	tests := []struct {
+		name     string
+		refs     VolumeRefs
+		expected string
+	}{
+		{
+			name:     "empty refs",
+			refs:     VolumeRefs{},
+			expected: "refs: null\n",
+		},
+		{
+			name: "single simple ref",
+			refs: VolumeRefs{
+				{Name: "data"},
+			},
+			expected: "refs: data\n",
+		},
+		{
+			name: "multiple simple refs",
+			refs: VolumeRefs{
+				{Name: "src"},
+				{Name: "dist"},
+			},
+			expected: "refs:\n- src\n- dist\n",
+		},
+		{
+			name: "single ref with mountPath",
+			refs: VolumeRefs{
+				{Name: "data", MountPath: "/custom"},
+			},
+			expected: "refs:\n- name: data\n  mountPath: /custom\n",
+		},
+		{
+			name: "single ref with readOnly",
+			refs: VolumeRefs{
+				{Name: "data", ReadOnly: boolPtr(true)},
+			},
+			expected: "refs:\n- name: data\n  readonly: true\n",
+		},
+		{
+			name: "mixed simple and complex refs",
+			refs: VolumeRefs{
+				{Name: "src"},
+				{Name: "dist", MountPath: "/output"},
+			},
+			expected: "refs:\n- name: src\n- name: dist\n  mountPath: /output\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj := struct {
+				Refs VolumeRefs `yaml:"refs"`
+			}{
+				Refs: tt.refs,
+			}
+			data, err := yaml.Marshal(&obj)
+			if err != nil {
+				t.Fatalf("MarshalYAML() error = %v", err)
+			}
+			if string(data) != tt.expected {
+				t.Errorf("MarshalYAML() = %q; want %q", string(data), tt.expected)
+			}
+		})
+	}
+}
