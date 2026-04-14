@@ -447,6 +447,9 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 		d.Output("  %s\n", d.styles.Dim("Waiting for health check..."))
 		if err := d.waitForHealthy(ctx, containerName, opts.HealthCheck); err != nil {
 			// Clean up the container if health check fails
+			// Use context.Background() for cleanup operations to ensure they complete
+			// even if the parent context is cancelled. This prevents orphaned containers
+			// when the workflow is interrupted.
 			d.StopContainer(context.Background(), containerName)
 			d.RemoveContainer(context.Background(), containerName)
 			return fmt.Errorf("health check failed: %w", err)
@@ -460,6 +463,7 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 		if !d.IsContainerRunning(ctx, containerName) {
 			// Get logs to help debug
 			logs, _ := d.GetContainerLogs(ctx, containerName, 20)
+			// Use context.Background() for cleanup to ensure it completes even if parent context is cancelled
 			d.RemoveContainer(context.Background(), containerName)
 			return fmt.Errorf("background container exited immediately. Logs:\n%s", logs)
 		}
