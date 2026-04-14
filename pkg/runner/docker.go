@@ -454,7 +454,7 @@ func (d *Docker) RunContainer(ctx context.Context, opts RunContainerOptions) err
 		d.Output("  %s\n", d.styles.Success("Container healthy"))
 	} else if opts.Background {
 		// No health check, just wait a moment for container to start
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(ContainerStopGracePeriod)
 
 		// Verify container is still running
 		if !d.IsContainerRunning(ctx, containerName) {

@@ -45,7 +45,7 @@ func NewFileWatcher(watchConfig *schema.Watch, basePath string, onChange func(ch
 		watchConfig: watchConfig,
 		basePath:    basePath,
 		onChange:    onChange,
-		debounce:    100 * time.Millisecond,
+		debounce:    DefaultDebounceInterval,
 		ctx:         ctx,
 		cancel:      cancel,
 	}
