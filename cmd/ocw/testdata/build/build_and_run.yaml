@@ -1,0 +1,11 @@
+name: Build and Run Test
+sequence:
+  - name: Build Container
+    id: build
+    build:
+      image: test-build-and-run
+      dockerfile: Dockerfile
+
+  - name: Run Container
+    image: "{{ steps.build.image }}"
+    cmd: echo "Running built container"

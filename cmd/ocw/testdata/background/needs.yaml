@@ -1,0 +1,12 @@
+name: Needs Test
+
+sequence:
+  - name: Start Service
+    id: service
+    image: redis:7-alpine
+    background: true
+
+  - name: Wait for Service
+    image: redis:7-alpine
+    needs: [service]
+    cmd: redis-cli -h service PING

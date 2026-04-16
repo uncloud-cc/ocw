@@ -108,6 +108,18 @@ func (tc *TemplateContext) evaluateExpression(expr string) (string, error) {
 		}
 		return "", fmt.Errorf("step output not found: steps.%s.%s", stepID, outputKey)
 
+	case "env":
+		// {{ env.<name> }}
+		envName := parts[1]
+		if value, ok := tc.Env[envName]; ok {
+			return value, nil
+		}
+		// Fallback to OS environment if not in context
+		if value := os.Getenv(envName); value != "" {
+			return value, nil
+		}
+		return "", fmt.Errorf("environment variable not found: %s", envName)
+
 	case "secrets":
 		// {{ secrets.<name> }} - deprecated, use {{ env.<name> }} instead
 		secretName := parts[1]

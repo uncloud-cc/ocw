@@ -1,0 +1,9 @@
+name: Template Env Test
+
+env:
+  MY_VAR: hello
+
+sequence:
+  - name: Show Env Template
+    image: alpine:latest
+    cmd: echo "Value is {{ env.MY_VAR }}"

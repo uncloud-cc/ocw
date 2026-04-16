@@ -1,0 +1,4 @@
+name: Invalid Schema Test
+sequence:
+  - name: Missing Image
+    cmd: echo "This should fail - no image specified"
