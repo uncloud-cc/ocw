@@ -1,6 +1,0 @@
-name: Template Test Workflow
-
-sequence:
-  - name: Show Workflow Name
-    image: alpine:latest
-    cmd: echo "Workflow name is {{ workflow.name }}"
