@@ -34,9 +34,14 @@ vet:
 
 # Generate coverage report
 coverage:
-	go test -race -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report: coverage.html"
+	@echo "Running tests with coverage..."
+	@go test -race -coverprofile=coverage.out ./pkg/... ./cmd/ocw/e2e/...
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo ""
+	@echo "Coverage Summary:"
+	@go tool cover -func=coverage.out | tail -1
+	@echo ""
+	@echo "HTML Report: coverage.html"
 
 # Run all checks
 check: fmt vet lint test

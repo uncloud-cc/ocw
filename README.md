@@ -6,16 +6,13 @@ Container-native CI/CD workflows that (actually) run locally.
 
 > Looking for the `uncloud-cc/ocw` Github Actions docs? 👉🏻 [Here](/docs/GithubAction.md)
 
-## Features
-- <img height="25" width="25" style="position: relative; top: 7px;" src="./docs//assets/code.svg"/> Runs on your local machine
-
 ## Why?
 
 Github Actions, Gitlab piplines, CircleCI jobs - they all lack one thing: It's ~~hard~~ impossible to fully run them locally.
 
 At the same time, many of the CI/CD workflows you rely on in the cloud, are also needed in your local development workflow (building your apps, running tests, etc.).
 
-ocw does both: Through a simple YAML syntax, it's easy to build local development workflows that you can also run inside Github Actions as your CI/CD pipelines.
+ocw does both: Through a simple YAML syntax that runs & builds containers, it's easy to create local development workflows that you can also run inside Github Actions as your CI/CD pipelines.
 
 ## Examples
 ### Run a local development server

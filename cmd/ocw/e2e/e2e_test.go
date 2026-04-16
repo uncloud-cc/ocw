@@ -122,6 +122,12 @@ func runTest(t *testing.T, tc TestCase) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	// Start the command
+	err = cmd.Start()
+	if err != nil {
+		t.Fatalf("Failed to start command: %v", err)
+	}
+
 	// If InterruptAfter is set, send SIGINT after the specified duration
 	if tc.InterruptAfter > 0 {
 		go func() {
@@ -132,7 +138,7 @@ func runTest(t *testing.T, tc TestCase) {
 		}()
 	}
 
-	err = cmd.Run()
+	err = cmd.Wait()
 
 	// Determine exit code
 	exitCode := 0
