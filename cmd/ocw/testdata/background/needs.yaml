@@ -8,5 +8,8 @@ sequence:
 
   - name: Wait for Service
     image: redis:7-alpine
+    # Note: 'needs' is defined in schema but not yet implemented in runner
+    # The test currently passes because redis starts quickly enough
+    # In the future, this should wait for the service to be ready
     needs: [service]
     cmd: redis-cli -h service PING

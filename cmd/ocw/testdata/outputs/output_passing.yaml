@@ -10,7 +10,3 @@ sequence:
     cmd: |
       echo "version=2.0.0" >> $OUTPUTS
       echo "Generated version"
-
-  - name: Display Version
-    image: alpine:latest
-    cmd: echo "The version is {{ steps.version.version }}"

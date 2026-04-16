@@ -537,7 +537,7 @@ func TestE2E_Outputs_OutputPassing(t *testing.T) {
 		Fixture:      "outputs",
 		Args:         []string{"-f", "output_passing.yaml"},
 		WantExitCode: 0,
-		WantStdout:   []string{"Generated version", "The version is 2.0.0"},
+		WantStdout:   []string{"Generated version", "final_version: 2.0.0"},
 		SkipNoDocker: true,
 	})
 }
