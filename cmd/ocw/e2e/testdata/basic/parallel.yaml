@@ -1,0 +1,13 @@
+name: Parallel Workflow
+parallel:
+  - name: Task A
+    image: alpine:latest
+    cmd: echo "Running task A"
+  
+  - name: Task B
+    image: alpine:latest
+    cmd: echo "Running task B"
+  
+  - name: Task C
+    image: alpine:latest
+    cmd: echo "Running task C"

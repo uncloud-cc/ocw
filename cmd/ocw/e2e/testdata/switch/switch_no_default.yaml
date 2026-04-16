@@ -1,0 +1,13 @@
+name: Switch Without Default
+
+switch: "{{ env.ENVIRONMENT }}"
+case:
+  staging:
+    - name: Deploy to Staging
+      image: alpine:latest
+      cmd: echo "Deploying to staging"
+
+  production:
+    - name: Deploy to Production
+      image: alpine:latest
+      cmd: echo "Deploying to production"

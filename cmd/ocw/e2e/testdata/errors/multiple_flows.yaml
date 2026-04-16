@@ -1,0 +1,9 @@
+name: Multiple Flow Controls
+sequence:
+  - name: Step 1
+    image: alpine
+    cmd: echo "test"
+parallel:
+  - name: Step 2
+    image: alpine
+    cmd: echo "test"

@@ -1,0 +1,6 @@
+name: Invalid YAML
+sequence:
+  - name: Test
+    image: alpine
+    cmd: echo "test"
+  invalid yaml here: [this is not valid

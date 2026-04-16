@@ -12,7 +12,7 @@ Github Actions, Gitlab piplines, CircleCI jobs - they all lack one thing: It's ~
 
 At the same time, many of the CI/CD workflows you rely on in the cloud, are also needed in your local development workflow (building your apps, running tests, etc.).
 
-ocw does both: Through a simple YAML syntax, it's easy to build local development workflows that you can also run inside Github Actions as your CI/CD pipelines.
+ocw does both: Through a simple YAML syntax that runs & builds containers, it's easy to create local development workflows that you can also run inside Github Actions as your CI/CD pipelines.
 
 ## Examples
 ### Run a local development server

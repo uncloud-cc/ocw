@@ -1,0 +1,13 @@
+name: Outputs Test
+
+sequence:
+  - name: Generate Output
+    id: generator
+    image: alpine:latest
+    cmd: |
+      echo "version=1.0.0" >> $OUTPUTS
+      echo "Generated version"
+
+  - name: Use Output
+    image: alpine:latest
+    cmd: echo "Version is {{ steps.generator.version }}"
