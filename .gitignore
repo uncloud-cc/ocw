@@ -2,3 +2,11 @@ ocw
 !/cmd/ocw
 # Added by goreleaser init:
 dist/
+
+# Coverage files
+*.out
+*.cover
+*.cov
+coverage.html
+coverage.xml
+*.coverage
