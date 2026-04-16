@@ -6,6 +6,9 @@ Container-native CI/CD workflows that (actually) run locally.
 
 > Looking for the `uncloud-cc/ocw` Github Actions docs? 👉🏻 [Here](/docs/GithubAction.md)
 
+## Features
+- <img height="25" width="25" style="position: relative; top: 7px;" src="./docs//assets/code.svg"/> Runs on your local machine
+
 ## Why?
 
 Github Actions, Gitlab piplines, CircleCI jobs - they all lack one thing: It's ~~hard~~ impossible to fully run them locally.
