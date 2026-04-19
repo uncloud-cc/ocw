@@ -1,5 +1,13 @@
+# Misc
+.DS_Store
+
+# ocw binary
 ocw
+
+# ocw code
 !/cmd/ocw
+!/pkg/ocw
+
 # Added by goreleaser init:
 dist/
 
