@@ -10,11 +10,11 @@ OCW separates concerns into three distinct layers: a container runtime abstracti
                     └────────┬─────────┘
                              │
                     ┌────────▼─────────┐
-                    │   OCW Runtime    │  ← Orchestrates workflows and jobs
+                    │   OCW Runtime    │  ← Orchestrates workflows, drives iteration
                     └────────┬─────────┘
                              │
                     ┌────────▼─────────┐
-                    │      Steps       │  ← Executable units of work
+                    │      Steps       │  ← Simple (execute) + Composite (iterate)
                     └────────┬─────────┘
                              │
                     ┌────────▼─────────┐
@@ -33,29 +33,36 @@ The container runtime is an interface that abstracts away the specifics of Docke
 
 The CLI is responsible for providing a concrete implementation. This means OCW's core logic never directly calls Docker - it always goes through the interface. Swapping container engines requires no changes to the runtime or steps.
 
-### Steps
+### Steps: Simple and Composite
 
-Steps are the building blocks of workflows. Each step type knows how to execute one kind of operation:
+Steps are divided into two categories based on what they do:
+
+**Simple steps** are leaf nodes that do actual work. They interact with the container runtime and execute to completion:
 
 | Step | What it does |
 |------|--------------|
 | Run | Executes a container |
 | Build | Builds an image from a Dockerfile |
-| Parallel | Runs child steps concurrently |
-| Sequence | Runs child steps one after another |
+
+**Composite steps** are control flow nodes that contain other steps. They don't execute directly - instead, they expose an iterator that yields child steps:
+
+| Step | What it does |
+|------|--------------|
+| Sequence | Runs children one after another |
+| Parallel | Runs children concurrently |
 | Switch | Chooses a branch based on a value |
 | Workflow | Invokes another OCW workflow |
 
-Every step follows the same pattern: it receives an execution context, does its work using the container runtime, and returns a result. Steps don't know about jobs or workflows - they just execute and report back.
-
-Each step type has a parser that converts the YAML schema into an executable step. This is where template interpolation happens. By the time a step executes, all `{{ }}` expressions have been resolved to concrete values.
+This separation is important: simple steps have an `Execute()` method, while composite steps have an `Iterator()` method. The runtime drives execution by repeatedly asking iterators for the next step(s).
 
 ### OCW Runtime
 
-The runtime is the orchestrator. It takes a parsed workflow, finds the requested job, and executes its steps according to the defined flow control. The runtime handles:
+The runtime is the orchestrator. It takes a parsed workflow, finds the requested job, and drives step execution. The runtime handles:
 
 - Building the interpolation scope (environment, secrets, previous step outputs)
-- Dispatching steps to the appropriate executor
+- Driving iteration for composite steps
+- Executing simple steps
+- Running parallel steps concurrently when an iterator yields multiple steps
 - Tracking background services and their health
 - Cleaning up resources when the workflow completes
 
@@ -66,13 +73,41 @@ When you run `ocw build`, here's what happens:
 1. The CLI loads and parses the workflow file
 2. The CLI creates a container runtime (e.g., Docker) and an OCW runtime
 3. The OCW runtime finds the `build` job
-4. For each step in the job:
-   - The runtime builds an interpolation scope with current env/secrets/outputs
-   - The step's parser resolves all template expressions
-   - The step executes using the container runtime
-   - Outputs are collected and added to the scope for the next step
-5. Background services are monitored until the workflow completes
-6. Resources are cleaned up
+4. The job's steps are parsed into executable form
+5. The runtime executes each step:
+   - For simple steps: call `Execute()` directly
+   - For composite steps: get an iterator and call `Next()` repeatedly
+6. As steps complete, their outputs are added to the scope
+7. Background services are tracked until the workflow completes
+8. Resources are cleaned up
+
+### The Iterator Pattern
+
+Composite steps use an iterator pattern that gives the runtime full control over execution:
+
+```
+Runtime                          Composite Step
+   │                                   │
+   │─── Iterator(scope) ──────────────>│
+   │<── returns iterator ──────────────│
+   │                                   │
+   │─── Next(nil) ────────────────────>│
+   │<── [step1] ───────────────────────│  (first step)
+   │                                   │
+   │    (runtime executes step1)       │
+   │                                   │
+   │─── Next([result1]) ──────────────>│
+   │<── [step2] ───────────────────────│  (next step with previous result)
+   │                                   │
+   │    (runtime executes step2)       │
+   │                                   │
+   │─── Next([result2]) ──────────────>│
+   │<── [], done=true ─────────────────│  (no more steps)
+```
+
+When `Next()` returns multiple steps, the runtime executes them in parallel. This is how the parallel step works - it returns all its children at once on the first `Next()` call.
+
+This pattern keeps the runtime in control. It can see what's happening, handle errors uniformly, and in the future could support pause/resume or step-by-step debugging.
 
 ## Step Communication
 
@@ -136,7 +171,9 @@ Resolving templates at parse time catches errors early. If a step references `{{
 
 ## Extending OCW
 
-**Adding a step type**: Create a new step implementation with an `Execute` method and a parser. Register it in the runtime's step dispatcher.
+**Adding a simple step type**: Create a step that implements `Execute()` and a parser that converts the schema to your step type.
+
+**Adding a composite step type**: Create a step that implements `Iterator()` returning a `StepIterator`. The iterator's `Next()` method yields child steps and tracks state between calls.
 
 **Supporting a new container engine**: Implement the container runtime interface. The rest of OCW works unchanged.
 
