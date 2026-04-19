@@ -18,7 +18,7 @@ var templatePattern = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 //   - {{ config.ns.key }}       - Configuration value
 //
 // Returns the interpolated string and any error encountered.
-func Interpolate(template string, scope *Scope) (string, error) {
+func Interpolate(template string, stepContext *StepContext) (string, error) {
 	var firstErr error
 
 	result := templatePattern.ReplaceAllStringFunc(template, func(match string) string {
@@ -33,7 +33,7 @@ func Interpolate(template string, scope *Scope) (string, error) {
 		}
 		expr := strings.TrimSpace(submatch[1])
 
-		value, err := resolveExpression(expr, scope)
+		value, err := resolveExpression(expr, stepContext)
 		if err != nil {
 			firstErr = &InterpolationError{
 				Template:   template,
@@ -49,7 +49,7 @@ func Interpolate(template string, scope *Scope) (string, error) {
 	return result, firstErr
 }
 
-func resolveExpression(expr string, scope *Scope) (string, error) {
+func resolveExpression(expr string, stepContext *StepContext) (string, error) {
 	parts := strings.Split(expr, ".")
 	if len(parts) < 2 {
 		return "", fmt.Errorf("invalid expression: %s", expr)
@@ -60,7 +60,7 @@ func resolveExpression(expr string, scope *Scope) (string, error) {
 		if len(parts) != 2 {
 			return "", fmt.Errorf("env requires exactly one key: env.VAR_NAME")
 		}
-		if val, ok := scope.Env[parts[1]]; ok {
+		if val, ok := stepContext.Env[parts[1]]; ok {
 			return val, nil
 		}
 		return "", fmt.Errorf("env variable %q not found", parts[1])
@@ -69,7 +69,7 @@ func resolveExpression(expr string, scope *Scope) (string, error) {
 		if len(parts) != 2 {
 			return "", fmt.Errorf("secrets requires exactly one key: secrets.NAME")
 		}
-		if val, ok := scope.Secrets[parts[1]]; ok {
+		if val, ok := stepContext.Secrets[parts[1]]; ok {
 			return val, nil
 		}
 		return "", fmt.Errorf("secret %q not found", parts[1])
@@ -78,7 +78,7 @@ func resolveExpression(expr string, scope *Scope) (string, error) {
 		if len(parts) != 2 {
 			return "", fmt.Errorf("inputs requires exactly one key: inputs.NAME")
 		}
-		if val, ok := scope.Inputs[parts[1]]; ok {
+		if val, ok := stepContext.Inputs[parts[1]]; ok {
 			return val, nil
 		}
 		return "", fmt.Errorf("input %q not found", parts[1])
@@ -88,7 +88,7 @@ func resolveExpression(expr string, scope *Scope) (string, error) {
 			return "", fmt.Errorf("steps requires step ID and key: steps.STEP_ID.KEY")
 		}
 		stepID, key := parts[1], parts[2]
-		if outputs, ok := scope.Steps[stepID]; ok {
+		if outputs, ok := stepContext.Steps[stepID]; ok {
 			if val, ok := outputs[key]; ok {
 				return val, nil
 			}
@@ -98,7 +98,7 @@ func resolveExpression(expr string, scope *Scope) (string, error) {
 
 	case "config":
 		// Navigate nested config: config.namespace.key
-		var current any = scope.Config
+		var current any = stepContext.Config
 		for i := 1; i < len(parts); i++ {
 			if m, ok := current.(map[string]any); ok {
 				current = m[parts[i]]
@@ -117,10 +117,10 @@ func resolveExpression(expr string, scope *Scope) (string, error) {
 }
 
 // InterpolateMap interpolates all values in a map.
-func InterpolateMap(m map[string]string, scope *Scope) (map[string]string, error) {
+func InterpolateMap(m map[string]string, stepContext *StepContext) (map[string]string, error) {
 	result := make(map[string]string, len(m))
 	for k, v := range m {
-		interpolated, err := Interpolate(v, scope)
+		interpolated, err := Interpolate(v, stepContext)
 		if err != nil {
 			return nil, fmt.Errorf("interpolating %q: %w", k, err)
 		}
@@ -130,10 +130,10 @@ func InterpolateMap(m map[string]string, scope *Scope) (map[string]string, error
 }
 
 // InterpolateSlice interpolates all values in a slice.
-func InterpolateSlice(s []string, scope *Scope) ([]string, error) {
+func InterpolateSlice(s []string, stepContext *StepContext) ([]string, error) {
 	result := make([]string, len(s))
 	for i, v := range s {
-		interpolated, err := Interpolate(v, scope)
+		interpolated, err := Interpolate(v, stepContext)
 		if err != nil {
 			return nil, fmt.Errorf("interpolating index %d: %w", i, err)
 		}

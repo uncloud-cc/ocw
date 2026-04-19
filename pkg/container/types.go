@@ -16,6 +16,74 @@ type VolumeID string
 // NetworkID is an opaque identifier for a network.
 type NetworkID string
 
+// ContainerStatus represents the current state of a container.
+type ContainerStatus string
+
+const (
+	// StatusCreated indicates the container has been created but not started.
+	StatusCreated ContainerStatus = "created"
+	// StatusRunning indicates the container is currently running.
+	StatusRunning ContainerStatus = "running"
+	// StatusPaused indicates the container is paused.
+	StatusPaused ContainerStatus = "paused"
+	// StatusRestarting indicates the container is restarting.
+	StatusRestarting ContainerStatus = "restarting"
+	// StatusExited indicates the container has exited.
+	StatusExited ContainerStatus = "exited"
+	// StatusDead indicates the container is dead (failed to stop cleanly).
+	StatusDead ContainerStatus = "dead"
+)
+
+// HealthStatus represents the health check status of a container.
+type HealthStatus string
+
+const (
+	// HealthNone indicates the container has no health check configured.
+	HealthNone HealthStatus = ""
+	// HealthStarting indicates the health check is still in the start period.
+	HealthStarting HealthStatus = "starting"
+	// HealthHealthy indicates the health check is passing.
+	HealthHealthy HealthStatus = "healthy"
+	// HealthUnhealthy indicates the health check is failing.
+	HealthUnhealthy HealthStatus = "unhealthy"
+)
+
+// Protocol represents a network protocol.
+type Protocol string
+
+const (
+	// ProtocolTCP is the TCP protocol.
+	ProtocolTCP Protocol = "tcp"
+	// ProtocolUDP is the UDP protocol.
+	ProtocolUDP Protocol = "udp"
+)
+
+// MountType represents the type of a volume mount.
+type MountType string
+
+const (
+	// MountTypeBind is a bind mount from the host filesystem.
+	MountTypeBind MountType = "bind"
+	// MountTypeVolume is a Docker-managed volume.
+	MountTypeVolume MountType = "volume"
+	// MountTypeTmpfs is a tmpfs mount (in-memory).
+	MountTypeTmpfs MountType = "tmpfs"
+)
+
+// NetworkDriver represents a network driver type.
+type NetworkDriver string
+
+const (
+	// NetworkDriverBridge is the default bridge network driver.
+	NetworkDriverBridge NetworkDriver = "bridge"
+	// NetworkDriverHost uses the host's network stack.
+	NetworkDriverHost NetworkDriver = "host"
+	// NetworkDriverNone disables networking.
+	NetworkDriverNone NetworkDriver = "none"
+	// NetworkDriverOverlay is for multi-host networking (Swarm).
+	NetworkDriverOverlay NetworkDriver = "overlay"
+)
+
 // ExitResult contains the result of a container execution.
 type ExitResult struct {
 	// StatusCode is the container's exit code (0 = success).
@@ -34,10 +102,10 @@ type ContainerInfo struct {
 	Name string
 	// Image is the container's image name.
 	Image string
-	// Status is the container's current status: "created", "running", "paused", "exited", "dead".
-	Status string
-	// Health is the health check status: "healthy", "unhealthy", "starting", or "" (no healthcheck).
-	Health string
+	// Status is the container's current status.
+	Status ContainerStatus
+	// Health is the health check status.
+	Health HealthStatus
 	// Ports lists the container's port bindings.
 	Ports []PortBinding
 }
@@ -48,8 +116,8 @@ type PortBinding struct {
 	ContainerPort int
 	// HostPort is the port on the host machine.
 	HostPort int
-	// Protocol is the network protocol: "tcp" or "udp".
-	Protocol string
+	// Protocol is the network protocol.
+	Protocol Protocol
 }
 
 // Streams represents attached container I/O streams.

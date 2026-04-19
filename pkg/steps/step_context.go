@@ -1,8 +1,8 @@
 package steps
 
-// Scope contains the data available for template interpolation.
+// StepContext contains the data available for template interpolation.
 // It is built up as steps execute and passed to parsers.
-type Scope struct {
+type StepContext struct {
 	// Env contains environment variables (workflow + job + step level merged).
 	Env map[string]string
 
@@ -20,9 +20,9 @@ type Scope struct {
 	Config map[string]any
 }
 
-// NewScope creates a new empty scope.
-func NewScope() *Scope {
-	return &Scope{
+// NewStepContext creates a new empty step context.
+func NewStepContext() *StepContext {
+	return &StepContext{
 		Env:     make(map[string]string),
 		Secrets: make(map[string]string),
 		Inputs:  make(map[string]string),
@@ -31,9 +31,9 @@ func NewScope() *Scope {
 	}
 }
 
-// Clone creates a deep copy of the scope.
-func (s *Scope) Clone() *Scope {
-	clone := NewScope()
+// Clone creates a deep copy of the step context.
+func (s *StepContext) Clone() *StepContext {
+	clone := NewStepContext()
 
 	for k, v := range s.Env {
 		clone.Env[k] = v
@@ -57,8 +57,8 @@ func (s *Scope) Clone() *Scope {
 	return clone
 }
 
-// WithStepOutputs returns a new scope with the given step's outputs added.
-func (s *Scope) WithStepOutputs(stepID string, outputs map[string]string) *Scope {
+// WithStepOutputs returns a new step context with the given step's outputs added.
+func (s *StepContext) WithStepOutputs(stepID string, outputs map[string]string) *StepContext {
 	clone := s.Clone()
 	clone.Steps[stepID] = make(map[string]string, len(outputs))
 	for k, v := range outputs {

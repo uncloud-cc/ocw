@@ -36,6 +36,6 @@ type CompositeStep interface {
 	Children() []Step
 
 	// Iterator returns a fresh iterator for executing this composite step.
-	// The scope provides the interpolation context for child steps.
-	Iterator(scope *Scope) StepIterator
+	// The stepContext provides the interpolation context for child steps.
+	Iterator(stepContext *StepContext) StepIterator
 }
