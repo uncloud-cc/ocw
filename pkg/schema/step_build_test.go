@@ -105,7 +105,7 @@ func TestBuildOutput_MarshalYAML(t *testing.T) {
 		{
 			name: "string value",
 			output: &BuildOutput{
-				String: strPtr("type=docker"),
+				String: stringPtr("type=docker"),
 			},
 			expected: "output: type=docker\n",
 		},
@@ -279,117 +279,4 @@ func TestBuildSecrets_MarshalYAML(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestBoolOrString_UnmarshalYAML(t *testing.T) {
-	tests := []struct {
-		name    string
-		yaml    string
-		check   func(*testing.T, *BoolOrString)
-		wantErr bool
-	}{
-		{
-			name: "bool true",
-			yaml: "value: true",
-			check: func(t *testing.T, b *BoolOrString) {
-				if b.Bool == nil || *b.Bool != true {
-					t.Error("expected Bool to be true")
-				}
-			},
-			wantErr: false,
-		},
-		{
-			name: "bool false",
-			yaml: "value: false",
-			check: func(t *testing.T, b *BoolOrString) {
-				if b.Bool == nil || *b.Bool != false {
-					t.Error("expected Bool to be false")
-				}
-			},
-			wantErr: false,
-		},
-		{
-			name: "string value",
-			yaml: "value: mode=max",
-			check: func(t *testing.T, b *BoolOrString) {
-				if b.String == nil || *b.String != "mode=max" {
-					t.Error("expected String to be 'mode=max'")
-				}
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var obj struct {
-				Value *BoolOrString `yaml:"value"`
-			}
-			err := yaml.Unmarshal([]byte(tt.yaml), &obj)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("UnmarshalYAML() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr && obj.Value != nil {
-				tt.check(t, obj.Value)
-			}
-		})
-	}
-}
-
-func TestBoolOrString_MarshalYAML(t *testing.T) {
-	tests := []struct {
-		name     string
-		value    *BoolOrString
-		expected string
-	}{
-		{
-			name: "bool true",
-			value: &BoolOrString{
-				Bool: boolPtr(true),
-			},
-			expected: "value: true\n",
-		},
-		{
-			name: "bool false",
-			value: &BoolOrString{
-				Bool: boolPtr(false),
-			},
-			expected: "value: false\n",
-		},
-		{
-			name: "string value",
-			value: &BoolOrString{
-				String: strPtr("mode=max"),
-			},
-			expected: "value: mode=max\n",
-		},
-		{
-			name:     "nil value",
-			value:    nil,
-			expected: "value: null\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			obj := struct {
-				Value *BoolOrString `yaml:"value"`
-			}{
-				Value: tt.value,
-			}
-			data, err := yaml.Marshal(&obj)
-			if err != nil {
-				t.Fatalf("MarshalYAML() error = %v", err)
-			}
-			if string(data) != tt.expected {
-				t.Errorf("MarshalYAML() = %q; want %q", string(data), tt.expected)
-			}
-		})
-	}
-}
-
-// Helper function
-func strPtr(s string) *string {
-	return &s
 }

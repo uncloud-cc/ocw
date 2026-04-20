@@ -44,37 +44,6 @@ type Job struct {
 	Step *Step `yaml:"-" json:"-"` // Handled via custom unmarshaling
 }
 
-// GetFlowType returns the flow control type used in this job
-func (j *Job) GetFlowType() string {
-	if len(j.Parallel) > 0 {
-		return "parallel"
-	}
-	if len(j.Sequence) > 0 {
-		return "sequence"
-	}
-	if j.Switch != nil {
-		return "switch"
-	}
-	if j.Step != nil {
-		return "step"
-	}
-	return ""
-}
-
-// GetSteps returns all top-level steps regardless of flow type
-func (j *Job) GetSteps() []Step {
-	if len(j.Parallel) > 0 {
-		return j.Parallel
-	}
-	if len(j.Sequence) > 0 {
-		return j.Sequence
-	}
-	if j.Step != nil {
-		return []Step{*j.Step}
-	}
-	return nil
-}
-
 // UnmarshalYAML implements custom unmarshaling for Job to handle single steps
 func (j *Job) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	// First try to unmarshal as a full job structure
@@ -87,7 +56,7 @@ func (j *Job) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	*j = Job(alias)
 
 	// If no flow control is set, check if this is a single step
-	if j.GetFlowType() == "" {
+	if getJobFlowType(j) == "" {
 		// Try to unmarshal as a step
 		var probe map[string]interface{}
 		if err := unmarshal(&probe); err != nil {
@@ -111,6 +80,23 @@ func (j *Job) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	return nil
+}
+
+// getJobFlowType is an internal helper to determine flow type during unmarshaling
+func getJobFlowType(j *Job) string {
+	if len(j.Parallel) > 0 {
+		return "parallel"
+	}
+	if len(j.Sequence) > 0 {
+		return "sequence"
+	}
+	if j.Switch != nil {
+		return "switch"
+	}
+	if j.Step != nil {
+		return "step"
+	}
+	return ""
 }
 
 // Jobs is a map of job ID to job configuration.

@@ -137,8 +137,8 @@ jobs:
 	}
 
 	// Check job-level volumes
-	job := ocw.GetJob("build")
-	if job == nil {
+	job, ok := ocw.Jobs["build"]
+	if !ok {
 		t.Fatal("Expected 'build' job")
 	}
 

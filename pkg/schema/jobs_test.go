@@ -55,60 +55,9 @@ func TestJob_GetFlowType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.job.GetFlowType()
+			result := getJobFlowType(tt.job)
 			if result != tt.expected {
-				t.Errorf("GetFlowType() = %q; want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestJob_GetSteps(t *testing.T) {
-	tests := []struct {
-		name     string
-		job      *Job
-		expected int
-	}{
-		{
-			name: "parallel steps",
-			job: &Job{
-				Parallel: []Step{
-					{RunStep: &RunStep{StepBase: StepBase{Name: "step1"}, Image: "nginx"}},
-					{RunStep: &RunStep{StepBase: StepBase{Name: "step2"}, Image: "alpine"}},
-				},
-			},
-			expected: 2,
-		},
-		{
-			name: "sequence steps",
-			job: &Job{
-				Sequence: []Step{
-					{RunStep: &RunStep{StepBase: StepBase{Name: "step1"}, Image: "nginx"}},
-				},
-			},
-			expected: 1,
-		},
-		{
-			name: "single step",
-			job: &Job{
-				Step: &Step{
-					RunStep: &RunStep{StepBase: StepBase{Name: "step1"}, Image: "nginx"},
-				},
-			},
-			expected: 1,
-		},
-		{
-			name:     "no steps",
-			job:      &Job{},
-			expected: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			steps := tt.job.GetSteps()
-			if len(steps) != tt.expected {
-				t.Errorf("GetSteps() returned %d steps; want %d", len(steps), tt.expected)
+				t.Errorf("getJobFlowType() = %q; want %q", result, tt.expected)
 			}
 		})
 	}

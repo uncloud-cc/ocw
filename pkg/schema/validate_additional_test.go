@@ -1,7 +1,6 @@
 package schema
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -262,29 +261,6 @@ name: test
 			}
 		})
 	}
-}
-
-func TestValidateAndParseFile(t *testing.T) {
-	// Create a temp file for testing
-	content := `
-schemaVersion: v1
-name: test
-jobs:
-  test:
-    sequence:
-      - image: alpine
-        run: echo test
-`
-	tmpFile := t.TempDir() + "/test.yaml"
-	err := os.WriteFile(tmpFile, []byte(content), 0644)
-	assert.NoError(t, err)
-
-	_, err = ValidateAndParseFile(tmpFile)
-	assert.NoError(t, err)
-
-	// Test non-existent file
-	_, err = ValidateAndParseFile("/non/existent/file.yaml")
-	assert.Error(t, err)
 }
 
 func TestIsValidationError(t *testing.T) {

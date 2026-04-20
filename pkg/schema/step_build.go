@@ -134,37 +134,6 @@ const (
 	BuildProgressRawJSON BuildProgressMode = "rawjson"
 )
 
-// BoolOrString can be either a boolean or a string
-type BoolOrString struct {
-	Bool   *bool
-	String *string
-}
-
-// UnmarshalYAML implements custom unmarshaling for BoolOrString
-func (b *BoolOrString) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var bl bool
-	if err := unmarshal(&bl); err == nil {
-		b.Bool = &bl
-		return nil
-	}
-
-	var s string
-	if err := unmarshal(&s); err == nil {
-		b.String = &s
-		return nil
-	}
-
-	return nil
-}
-
-// MarshalYAML implements custom marshaling for BoolOrString
-func (b BoolOrString) MarshalYAML() (interface{}, error) {
-	if b.Bool != nil {
-		return *b.Bool, nil
-	}
-	return b.String, nil
-}
-
 // BuildConfig represents the build configuration.
 //
 // OCW automatically provides:

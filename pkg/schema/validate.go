@@ -1,3 +1,4 @@
+// Package schema validation logic - see doc.go for package guidelines
 package schema
 
 import (
@@ -407,20 +408,6 @@ func (v *validator) validateStepOrSteps(sos *StepOrSteps) {
 // ValidateAndParse parses YAML data and validates the result
 func ValidateAndParse(data []byte) (*OCW, error) {
 	ocw, err := Parse(data)
-	if err != nil {
-		return nil, fmt.Errorf("parse error: %w", err)
-	}
-
-	if err := ocw.Validate(); err != nil {
-		return nil, fmt.Errorf("validation error: %w", err)
-	}
-
-	return ocw, nil
-}
-
-// ValidateAndParseFile parses a YAML file and validates the result
-func ValidateAndParseFile(path string) (*OCW, error) {
-	ocw, err := ParseFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("parse error: %w", err)
 	}

@@ -1,8 +1,6 @@
 package schema
 
 import (
-	"os"
-
 	"github.com/goccy/go-yaml"
 )
 
@@ -45,81 +43,14 @@ type OCW struct {
 	Default *StepOrSteps `yaml:"default,omitempty" json:"default,omitempty"`
 }
 
-// GetFlowType returns the flow control type used in this workflow (for direct execution)
-func (o *OCW) GetFlowType() string {
-	if len(o.Parallel) > 0 {
-		return "parallel"
-	}
-	if len(o.Sequence) > 0 {
-		return "sequence"
-	}
-	if o.Switch != nil {
-		return "switch"
-	}
-	return ""
-}
-
-// HasDirectFlow returns true if the workflow has direct flow control (not just jobs)
-func (o *OCW) HasDirectFlow() bool {
-	return o.GetFlowType() != ""
-}
-
-// HasJobs returns true if the workflow has named jobs
-func (o *OCW) HasJobs() bool {
-	return len(o.Jobs) > 0
-}
-
-// GetJob returns a job by name, or nil if not found
-func (o *OCW) GetJob(name string) *Job {
-	if o.Jobs == nil {
-		return nil
-	}
-	job, ok := o.Jobs[name]
-	if !ok {
-		return nil
-	}
-	return &job
-}
-
-// GetJobNames returns a list of all job names
-func (o *OCW) GetJobNames() []string {
-	if o.Jobs == nil {
-		return nil
-	}
-	names := make([]string, 0, len(o.Jobs))
-	for name := range o.Jobs {
-		names = append(names, name)
-	}
-	return names
-}
-
-// GetSteps returns all top-level steps regardless of flow type
-func (o *OCW) GetSteps() []Step {
-	if len(o.Parallel) > 0 {
-		return o.Parallel
-	}
-	if len(o.Sequence) > 0 {
-		return o.Sequence
-	}
-	return nil
-}
-
-// Parse parses a YAML byte slice into an OCW schema
+// Parse parses a YAML byte slice into an OCW schema.
+// This is used by pkg/ocw/parse.go - use that package for file parsing instead.
 func Parse(data []byte) (*OCW, error) {
 	var ocw OCW
 	if err := yaml.Unmarshal(data, &ocw); err != nil {
 		return nil, err
 	}
 	return &ocw, nil
-}
-
-// ParseFile parses a YAML file into an OCW schema
-func ParseFile(path string) (*OCW, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	return Parse(data)
 }
 
 // Marshal serializes an OCW schema to YAML

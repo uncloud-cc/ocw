@@ -39,3 +39,18 @@ func ParseBytes(data []byte) (*schema.OCW, error) {
 func ParseString(data string) (*schema.OCW, error) {
 	return ParseBytes([]byte(data))
 }
+
+// ValidateAndParseFile parses a YAML file and validates the result.
+// Returns an error if the file cannot be read, parsed, or validated.
+func ValidateAndParseFile(path string) (*schema.OCW, error) {
+	ocw, err := ParseFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("parse error: %w", err)
+	}
+
+	if err := ocw.Validate(); err != nil {
+		return nil, fmt.Errorf("validation error: %w", err)
+	}
+
+	return ocw, nil
+}

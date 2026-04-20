@@ -1,39 +1,41 @@
-// Package schema defines the OCW workflow configuration types.
+// Package schema defines the OCW (Open Container Workflow) data types, validation, and YAML marshalling.
 //
-// The schema package provides:
-//   - YAML parsing for OCW workflow files
-//   - Validation of workflow configurations
-//   - JSON Schema generation for IDE support
+// This package contains:
+//   - Go struct definitions for the OCW schema
+//   - Schema validation (ensures data conforms to schema structure)
+//   - YAML marshalling/unmarshalling logic (custom MarshalYAML/UnmarshalYAML methods)
 //
-// Basic usage:
+// This package does NOT contain:
+//   - Business logic or workflow execution (see pkg/ocw)
+//   - Parsing functions for reading workflow files (see pkg/ocw)
+//   - Helper methods for traversing/processing workflows (see pkg/ocw)
 //
-//	ocw, err := schema.ParseFile("workflow.yaml")
-//	if err != nil {
-//	    log.Fatal(err)
+// If you need to add logic that operates on these types, put it in pkg/ocw instead.
+//
+// Design Guidelines:
+//   - Keep types pure and focused on data representation
+//   - Validation checks structural integrity (required fields, valid formats, flow control rules)
+//   - Ensure YAML tags match the JSON schema
+//   - Use custom unmarshaling for flexible types (string or slice, etc.)
+//   - Test marshalling and validation in *_test.go files
+//
+// Example type definition with validation:
+//
+//	// Validate ensures the step has valid configuration
+//	func (s *Step) Validate() error {
+//	    if s.Image == "" {
+//	        return fmt.Errorf("step image is required")
+//	    }
+//	    return nil
 //	}
-//	if err := ocw.Validate(); err != nil {
-//	    log.Fatal(err)
+//
+// For parsing workflows and working with them, use pkg/ocw instead:
+//
+//	ocw, err := ocw.ParseFile("workflow.yaml")  // Use pkg/ocw
+//	// Access helpers like:
+//	if err := ocw.Validate(); err != nil {      // Schema validation
+//	    return err
 //	}
-//
-// Parsing from bytes:
-//
-//	data := []byte(`
-//	schemaVersion: v1
-//	name: my-workflow
-//	jobs:
-//	  build:
-//	    sequence:
-//	      - image: golang:1.24
-//	        run: go build
-//	`)
-//	ocw, err := schema.Parse(data)
-//
-// The schema supports multiple workflow patterns:
-//   - Job-based workflows with named jobs
-//   - Direct flow control (parallel, sequence, switch)
-//   - Nested steps with parallel/sequence execution
-//   - Service containers and health checks
-//   - Volume mounting and environment variables
-//   - Build steps for Docker images
-//   - Hot reload with file watching
+//	flowType := ocw.GetFlowType(ocw)            // Function in pkg/ocw
+//	steps := ocw.GetSteps(ocw)                  // Function in pkg/ocw
 package schema
