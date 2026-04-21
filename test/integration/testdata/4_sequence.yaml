@@ -1,0 +1,8 @@
+name: Sequential workflow!
+sequence:
+  - name: Step a)
+    image: alpine
+    cmd: for i in $(seq 3); do echo "Processing... $i"; sleep 1; done
+  - name: Step b)
+    image: node:25-alpine
+    cmd: npx cowsay Second step!

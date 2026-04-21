@@ -1,0 +1,27 @@
+name: CI Pipeline
+sequence:
+  - name: Setup
+    image: alpine:latest
+    cmd: echo "Setting up..."
+
+  - name: Run Tests in Parallel
+    parallel:
+      - name: Unit Tests
+        image: node:20-alpine
+        cmd: echo "Running unit tests..."
+
+      - name: Integration Tests
+        image: node:20-alpine
+        cmd: echo "Running integration tests..."
+
+      - name: Lint
+        image: node:20-alpine
+        cmd: echo "Running linter..."
+
+  - name: Build
+    image: node:20-alpine
+    cmd: echo "Building (only after all tests pass)..."
+
+  - name: Deploy
+    image: alpine:latest
+    cmd: echo "Deploying..."
