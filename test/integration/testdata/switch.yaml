@@ -1,0 +1,22 @@
+name: Environment Deploy
+
+switch: "{{ env.DEPLOY_ENV }}"
+case:
+  staging:
+    name: Deploy to Staging
+    image: alpine:latest
+    cmd: echo "Deploying to staging environment..."
+
+  production:
+    sequence:
+      - name: Deploy to Production
+        image: alpine:latest
+        cmd: echo "Deploying to production environment..."
+      - name: Notify Team
+        image: alpine:latest
+        cmd: echo "Production deployment complete!"
+
+default:
+  name: Deploy to Development
+  image: alpine:latest
+  cmd: echo "Deploying to development (default)..."

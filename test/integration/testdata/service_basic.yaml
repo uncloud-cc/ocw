@@ -1,0 +1,11 @@
+name: Service networking demo
+sequence:
+  - name: Start Redis
+    id: redis
+    image: redis:7-alpine
+    background: true
+
+  - name: Use Redis
+    image: redis:7-alpine
+    needs: [redis]
+    cmd: echo "Connected to redis"

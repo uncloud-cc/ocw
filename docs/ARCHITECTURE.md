@@ -160,14 +160,17 @@ Cleanup behavior is configurable. Background containers can be kept running afte
 
 ## Template Interpolation
 
-OCW uses `{{ }}` syntax for dynamic values. Templates are resolved when parsing steps, not during execution. Supported references:
+OCW uses `{{ }}` syntax for dynamic values. Templates are resolved at execution time, just before a step runs. This allows step outputs from earlier steps to be referenced by later steps. Supported references:
 
 - `{{ env.VAR }}` - Environment variable
 - `{{ secrets.NAME }}` - Secret value
 - `{{ steps.ID.key }}` - Output from a previous step
-- `{{ inputs.NAME }}` - Workflow input
+- `{{ workflow.name }}` - Workflow name
+- `{{ job.name }}` - Current job name
 
-Resolving templates at parse time catches errors early. If a step references `{{ steps.foo.bar }}` but step `foo` doesn't exist or hasn't run yet, the error is raised before any containers start.
+Whitespace inside the delimiters is flexible: `{{ env.X }}`, `{{env.X}}`, and `{{  env.X  }}` are all equivalent.
+
+Unresolved references produce an error that stops execution, except for `{{ env.VAR }}` references which produce a warning and leave the original template text in place. This allows environment variables to be resolved by the container itself when appropriate.
 
 ## Extending OCW
 

@@ -1,0 +1,11 @@
+name: Build and run containers
+sequence:
+  - name: Build the container
+    id: build
+    build:
+      image: my-first-ocw-container
+      dockerfile: Dockerfile
+
+  - name: Run the container
+    image: "{{ steps.build.image }}"
+    cmd: echo "Running built image"
