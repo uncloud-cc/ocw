@@ -43,37 +43,6 @@ type OptionalStepBase struct {
 // UlimitValue can be either a number or a "soft:hard" string
 type UlimitValue = NumberOrString
 
-// StepOrSteps can be a single step or an array of steps
-type StepOrSteps struct {
-	Single   *Step
-	Multiple []Step
-}
-
-// UnmarshalYAML implements custom unmarshaling for StepOrSteps
-func (s *StepOrSteps) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var single Step
-	if err := unmarshal(&single); err == nil {
-		s.Single = &single
-		return nil
-	}
-
-	var multiple []Step
-	if err := unmarshal(&multiple); err == nil {
-		s.Multiple = multiple
-		return nil
-	}
-
-	return nil
-}
-
-// MarshalYAML implements custom marshaling for StepOrSteps
-func (s StepOrSteps) MarshalYAML() (interface{}, error) {
-	if s.Single != nil {
-		return s.Single, nil
-	}
-	return s.Multiple, nil
-}
-
 // Step represents any step type (discriminated union)
 type Step struct {
 	// RunStep for container run steps

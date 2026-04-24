@@ -173,11 +173,11 @@ jobs:
       - switch: ${{ env.MODE }}
         case:
           dev:
-            - image: alpine
-              run: echo dev
+            image: alpine
+            run: echo dev
           prod:
-            - image: alpine
-              run: echo prod
+            image: alpine
+            run: echo prod
 `,
 			wantErr: false,
 		},
@@ -192,11 +192,11 @@ jobs:
       - switch: ${{ env.MODE }}
         case:
           dev:
-            - image: alpine
-              run: echo dev
+            image: alpine
+            run: echo dev
         default:
-          - image: alpine
-            run: echo default
+          image: alpine
+          run: echo default
 `,
 			wantErr: false,
 		},
@@ -345,11 +345,11 @@ name: test
 switch: ${{ env.MODE }}
 case:
   dev:
-    - image: alpine
-      run: echo dev
+    image: alpine
+    run: echo dev
   prod:
-    - image: alpine
-      run: echo prod
+    image: alpine
+    run: echo prod
 `,
 			wantErr: false,
 		},
@@ -361,11 +361,11 @@ name: test
 switch: ${{ env.MODE }}
 case:
   dev:
-    - image: alpine
-      run: echo dev
+    image: alpine
+    run: echo dev
 default:
-  - image: alpine
-    run: echo fallback
+  image: alpine
+  run: echo fallback
 `,
 			wantErr: false,
 		},

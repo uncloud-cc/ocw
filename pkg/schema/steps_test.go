@@ -6,43 +6,43 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-func TestStepOrSteps_UnmarshalYAML(t *testing.T) {
+func TestStep_UnmarshalYAML(t *testing.T) {
 	tests := []struct {
 		name    string
 		yaml    string
-		check   func(*testing.T, *StepOrSteps)
+		check   func(*testing.T, *Step)
 		wantErr bool
 	}{
 		{
-			name: "single step",
+			name: "single run step",
 			yaml: "step:\n  name: test\n  image: nginx",
-			check: func(t *testing.T, s *StepOrSteps) {
-				if s.Single == nil {
-					t.Error("expected Single to be set")
-					return
-				}
-				if s.Single.RunStep == nil {
+			check: func(t *testing.T, s *Step) {
+				if s.RunStep == nil {
 					t.Error("expected RunStep to be set")
 					return
 				}
-				if s.Single.RunStep.Name != "test" {
-					t.Errorf("expected name 'test', got %q", s.Single.RunStep.Name)
+				if s.RunStep.Name != "test" {
+					t.Errorf("expected name 'test', got %q", s.RunStep.Name)
 				}
 			},
 			wantErr: false,
 		},
 		{
-			name: "multiple steps",
-			yaml: "step:\n  - name: test1\n    image: nginx\n  - name: test2\n    image: alpine",
-			check: func(t *testing.T, s *StepOrSteps) {
-				if len(s.Multiple) != 2 {
-					t.Errorf("expected 2 steps, got %d", len(s.Multiple))
+			name: "parallel step",
+			yaml: "step:\n  parallel:\n    - name: test1\n      image: nginx\n    - name: test2\n      image: alpine",
+			check: func(t *testing.T, s *Step) {
+				if s.ParallelStep == nil {
+					t.Error("expected ParallelStep to be set")
 					return
 				}
-				if s.Multiple[0].RunStep == nil || s.Multiple[0].RunStep.Name != "test1" {
+				if len(s.ParallelStep.Parallel) != 2 {
+					t.Errorf("expected 2 steps, got %d", len(s.ParallelStep.Parallel))
+					return
+				}
+				if s.ParallelStep.Parallel[0].RunStep == nil || s.ParallelStep.Parallel[0].RunStep.Name != "test1" {
 					t.Error("expected first step name to be 'test1'")
 				}
-				if s.Multiple[1].RunStep == nil || s.Multiple[1].RunStep.Name != "test2" {
+				if s.ParallelStep.Parallel[1].RunStep == nil || s.ParallelStep.Parallel[1].RunStep.Name != "test2" {
 					t.Error("expected second step name to be 'test2'")
 				}
 			},
@@ -53,7 +53,7 @@ func TestStepOrSteps_UnmarshalYAML(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var obj struct {
-				Step *StepOrSteps `yaml:"step"`
+				Step *Step `yaml:"step"`
 			}
 			err := yaml.Unmarshal([]byte(tt.yaml), &obj)
 			if (err != nil) != tt.wantErr {
@@ -67,47 +67,47 @@ func TestStepOrSteps_UnmarshalYAML(t *testing.T) {
 	}
 }
 
-func TestStepOrSteps_MarshalYAML(t *testing.T) {
+func TestStep_MarshalYAML(t *testing.T) {
 	tests := []struct {
 		name     string
-		sos      *StepOrSteps
+		step     *Step
 		expected string
 	}{
 		{
-			name: "single step",
-			sos: &StepOrSteps{
-				Single: &Step{
-					RunStep: &RunStep{
-						Image: "alpine",
-						Cmd:   "echo hello",
-					},
+			name: "run step",
+			step: &Step{
+				RunStep: &RunStep{
+					Image: "alpine",
+					Cmd:   "echo hello",
 				},
 			},
 			expected: "value:\n  name: \"\"\n  image: alpine\n  cmd: echo hello\n",
 		},
 		{
-			name: "multiple steps",
-			sos: &StepOrSteps{
-				Multiple: []Step{
-					{
-						RunStep: &RunStep{
-							Image: "alpine",
-							Cmd:   "echo step1",
+			name: "parallel step",
+			step: &Step{
+				ParallelStep: &ParallelStep{
+					Parallel: []Step{
+						{
+							RunStep: &RunStep{
+								Image: "alpine",
+								Cmd:   "echo step1",
+							},
 						},
-					},
-					{
-						RunStep: &RunStep{
-							Image: "alpine",
-							Cmd:   "echo step2",
+						{
+							RunStep: &RunStep{
+								Image: "alpine",
+								Cmd:   "echo step2",
+							},
 						},
 					},
 				},
 			},
-			expected: "value:\n- name: \"\"\n  image: alpine\n  cmd: echo step1\n- name: \"\"\n  image: alpine\n  cmd: echo step2\n",
+			expected: "value:\n  parallel:\n  - name: \"\"\n    image: alpine\n    cmd: echo step1\n  - name: \"\"\n    image: alpine\n    cmd: echo step2\n",
 		},
 		{
 			name:     "nil value",
-			sos:      nil,
+			step:     nil,
 			expected: "value: null\n",
 		},
 	}
@@ -115,9 +115,9 @@ func TestStepOrSteps_MarshalYAML(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			obj := struct {
-				Value *StepOrSteps `yaml:"value"`
+				Value *Step `yaml:"value"`
 			}{
-				Value: tt.sos,
+				Value: tt.step,
 			}
 			data, err := yaml.Marshal(&obj)
 			if err != nil {

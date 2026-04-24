@@ -126,23 +126,6 @@ func TestBuildSecretsJSONSchema(t *testing.T) {
 	assert.Contains(t, schema.AnyOf[1].Items.Required, "id")
 }
 
-func TestStepOrStepsJSONSchema(t *testing.T) {
-	var s StepOrSteps
-	schema := s.JSONSchema()
-
-	assert.NotNil(t, schema)
-	assert.NotNil(t, schema.AnyOf)
-	assert.Len(t, schema.AnyOf, 2)
-
-	// Single step reference
-	assert.Equal(t, "#/$defs/Step", schema.AnyOf[0].Ref)
-
-	// Array of steps
-	assert.Equal(t, "array", schema.AnyOf[1].Type)
-	assert.NotNil(t, schema.AnyOf[1].Items)
-	assert.Equal(t, "#/$defs/Step", schema.AnyOf[1].Items.Ref)
-}
-
 func TestStepJSONSchema(t *testing.T) {
 	var s Step
 	schema := s.JSONSchema()

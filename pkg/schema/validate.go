@@ -356,20 +356,20 @@ func (v *validator) validateSwitchStep(step *SwitchStep) {
 		v.withPath("case").addError("must have at least one case")
 	}
 
-	for caseName, caseSteps := range step.Case {
+	for caseName, caseStep := range step.Case {
 		cv := v.withPath("case").withPath(caseName)
-		cv.validateStepOrSteps(&caseSteps)
+		cv.validateStep(&caseStep)
 		v.merge(cv)
 	}
 
 	if step.Default != nil {
 		dv := v.withPath("default")
-		dv.validateStepOrSteps(step.Default)
+		dv.validateStep(step.Default)
 		v.merge(dv)
 	}
 }
 
-func (v *validator) validateSwitchFlow(switchExpr *string, cases map[string]StepOrSteps, defaultCase *StepOrSteps) {
+func (v *validator) validateSwitchFlow(switchExpr *string, cases map[string]Step, defaultCase *Step) {
 	if switchExpr == nil || *switchExpr == "" {
 		v.withPath("switch").addError("is required")
 	}
@@ -378,30 +378,16 @@ func (v *validator) validateSwitchFlow(switchExpr *string, cases map[string]Step
 		v.withPath("case").addError("must have at least one case")
 	}
 
-	for caseName, caseSteps := range cases {
+	for caseName, caseStep := range cases {
 		cv := v.withPath("case").withPath(caseName)
-		cv.validateStepOrSteps(&caseSteps)
+		cv.validateStep(&caseStep)
 		v.merge(cv)
 	}
 
 	if defaultCase != nil {
 		dv := v.withPath("default")
-		dv.validateStepOrSteps(defaultCase)
+		dv.validateStep(defaultCase)
 		v.merge(dv)
-	}
-}
-
-func (v *validator) validateStepOrSteps(sos *StepOrSteps) {
-	if sos.Single != nil {
-		v.validateStep(sos.Single)
-	} else if sos.Multiple != nil {
-		for i, s := range sos.Multiple {
-			sv := v.withIndex(i)
-			sv.validateStep(&s)
-			v.merge(sv)
-		}
-	} else {
-		v.addError("must have at least one step")
 	}
 }
 

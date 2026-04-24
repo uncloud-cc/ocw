@@ -6,7 +6,7 @@ type SwitchStep struct {
 	// Switch is the expression to switch on
 	Switch string `yaml:"switch" json:"switch" jsonschema:"required"`
 	// Case are the case branches
-	Case map[string]StepOrSteps `yaml:"case" json:"case" jsonschema:"required"`
+	Case map[string]Step `yaml:"case" json:"case" jsonschema:"required"`
 	// Default is the default branch
-	Default *StepOrSteps `yaml:"default,omitempty" json:"default,omitempty"`
+	Default *Step `yaml:"default,omitempty" json:"default,omitempty"`
 }

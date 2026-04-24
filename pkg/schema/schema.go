@@ -38,9 +38,9 @@ type OCW struct {
 	// Switch conditionally executes steps
 	Switch *string `yaml:"switch,omitempty" json:"switch,omitempty"`
 	// Case are the switch case branches
-	Case map[string]StepOrSteps `yaml:"case,omitempty" json:"case,omitempty"`
+	Case map[string]Step `yaml:"case,omitempty" json:"case,omitempty"`
 	// Default is the switch default branch
-	Default *StepOrSteps `yaml:"default,omitempty" json:"default,omitempty"`
+	Default *Step `yaml:"default,omitempty" json:"default,omitempty"`
 }
 
 // Parse parses a YAML byte slice into an OCW schema.
