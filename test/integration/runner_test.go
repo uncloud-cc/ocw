@@ -22,15 +22,15 @@ func parseFixture(t *testing.T, filename string) *schema.OCW {
 	return w
 }
 
-// newRuntime creates a new runtime with the recording runtime.
-func newRuntime(rec *testhelpers.RecordingRuntime) *ocw.Runtime {
-	return ocw.NewRuntime(rec, log.New(log.Writer(), "", 0))
+// newEngine creates a new engine with the recording runtime.
+func newEngine(rec *testhelpers.RecordingRuntime) *ocw.Engine {
+	return ocw.NewEngine(rec, log.New(log.Writer(), "", 0))
 }
 
 func TestIntegration_HelloWorld(t *testing.T) {
 	w := parseFixture(t, "hello_world.yaml")
 	rec := testhelpers.NewRecordingRuntime(10 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "")
 	require.NoError(t, err)
@@ -44,7 +44,7 @@ func TestIntegration_HelloWorld(t *testing.T) {
 func TestIntegration_Build(t *testing.T) {
 	w := parseFixture(t, "build.yaml")
 	rec := testhelpers.NewRecordingRuntime(10 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "")
 	require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestIntegration_Build(t *testing.T) {
 func TestIntegration_BuildAndRun(t *testing.T) {
 	w := parseFixture(t, "build_and_run.yaml")
 	rec := testhelpers.NewRecordingRuntime(50 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "")
 	require.NoError(t, err)
@@ -82,7 +82,7 @@ func TestIntegration_BuildAndRun(t *testing.T) {
 func TestIntegration_Sequence(t *testing.T) {
 	w := parseFixture(t, "sequence.yaml")
 	rec := testhelpers.NewRecordingRuntime(50 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "")
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestIntegration_Sequence(t *testing.T) {
 func TestIntegration_Parallel(t *testing.T) {
 	w := parseFixture(t, "parallel.yaml")
 	rec := testhelpers.NewRecordingRuntime(100 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	start := time.Now()
 	result, err := rt.RunWorkflow(context.Background(), w, "")
@@ -124,7 +124,7 @@ func TestIntegration_Parallel(t *testing.T) {
 func TestIntegration_Nested(t *testing.T) {
 	w := parseFixture(t, "nested.yaml")
 	rec := testhelpers.NewRecordingRuntime(50 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "")
 	require.NoError(t, err)
@@ -166,7 +166,7 @@ func TestIntegration_Switch_Staging(t *testing.T) {
 	w.Env = schema.Env{"DEPLOY_ENV": schema.EnvVar{Value: "staging"}}
 
 	rec := testhelpers.NewRecordingRuntime(10 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "")
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestIntegration_Switch_Production(t *testing.T) {
 	w.Env = schema.Env{"DEPLOY_ENV": schema.EnvVar{Value: "production"}}
 
 	rec := testhelpers.NewRecordingRuntime(10 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "")
 	require.NoError(t, err)
@@ -201,7 +201,7 @@ func TestIntegration_Switch_Default(t *testing.T) {
 	w.Env = schema.Env{"DEPLOY_ENV": schema.EnvVar{Value: "something-else"}}
 
 	rec := testhelpers.NewRecordingRuntime(10 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "")
 	require.NoError(t, err)
@@ -215,7 +215,7 @@ func TestIntegration_Switch_Default(t *testing.T) {
 func TestIntegration_Jobs_Build(t *testing.T) {
 	w := parseFixture(t, "jobs.yaml")
 	rec := testhelpers.NewRecordingRuntime(50 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "build")
 	require.NoError(t, err)
@@ -230,7 +230,7 @@ func TestIntegration_Jobs_Build(t *testing.T) {
 func TestIntegration_Jobs_Test(t *testing.T) {
 	w := parseFixture(t, "jobs.yaml")
 	rec := testhelpers.NewRecordingRuntime(100 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	start := time.Now()
 	result, err := rt.RunWorkflow(context.Background(), w, "test")
@@ -251,7 +251,7 @@ func TestIntegration_Jobs_Test(t *testing.T) {
 func TestIntegration_Jobs_Dev(t *testing.T) {
 	w := parseFixture(t, "jobs.yaml")
 	rec := testhelpers.NewRecordingRuntime(10 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "dev")
 	require.NoError(t, err)
@@ -265,7 +265,7 @@ func TestIntegration_Jobs_Dev(t *testing.T) {
 func TestIntegration_Jobs_NotFound(t *testing.T) {
 	w := parseFixture(t, "jobs.yaml")
 	rec := testhelpers.NewRecordingRuntime(10 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	_, err := rt.RunWorkflow(context.Background(), w, "nonexistent")
 	require.Error(t, err)
@@ -275,7 +275,7 @@ func TestIntegration_Jobs_NotFound(t *testing.T) {
 func TestIntegration_ServiceBasic(t *testing.T) {
 	w := parseFixture(t, "service_basic.yaml")
 	rec := testhelpers.NewRecordingRuntime(10 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "")
 	require.NoError(t, err)
@@ -311,7 +311,7 @@ func TestIntegration_ServiceBasic(t *testing.T) {
 func TestIntegration_ServiceHealthCheck(t *testing.T) {
 	w := parseFixture(t, "service_healthcheck.yaml")
 	rec := testhelpers.NewRecordingRuntime(10 * time.Millisecond)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	result, err := rt.RunWorkflow(context.Background(), w, "")
 	require.NoError(t, err)
@@ -347,7 +347,7 @@ func TestIntegration_ContextCancellation(t *testing.T) {
 	w := parseFixture(t, "sequence.yaml")
 	// Use a long delay so the step is in-flight when we cancel.
 	rec := testhelpers.NewRecordingRuntime(5 * time.Second)
-	rt := newRuntime(rec)
+	rt := newEngine(rec)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()

@@ -74,9 +74,9 @@ func RunWorkflow(ctx context.Context, config *RunConfig) error {
 	// Create logger
 	logger := createLogger(config)
 
-	// For now, use DummyRuntime - the Runtime wraps it
+	// For now, use DummyRuntime - the Engine wraps it
 	dummy := ocw.NewDummyRuntime(logger)
-	rt := ocw.NewRuntime(dummy, logger)
+	rt := ocw.NewEngine(dummy, logger)
 
 	// Run the workflow
 	start := time.Now()
