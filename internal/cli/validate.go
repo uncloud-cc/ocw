@@ -28,13 +28,6 @@ follows the OCW schema.`,
 			if file == "" {
 				file = viper.GetString("file")
 			}
-			if file == "" {
-				discovered, err := discoverWorkflowFile()
-				if err != nil {
-					return err
-				}
-				file = discovered
-			}
 		}
 
 		// Get absolute path for better error messages
