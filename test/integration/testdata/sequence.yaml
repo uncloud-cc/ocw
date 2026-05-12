@@ -1,8 +1,0 @@
-name: Sequential workflow
-sequence:
-  - name: Step A
-    image: alpine
-    cmd: echo "Processing step A"
-  - name: Step B
-    image: node:25-alpine
-    cmd: echo "Processing step B"

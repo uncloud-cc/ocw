@@ -1,6 +1,0 @@
-schemaVersion: 0.1.0
-name: Test Workflow
-sequence:
-  - name: step1
-    image: alpine:latest
-    cmd: echo "hello"
