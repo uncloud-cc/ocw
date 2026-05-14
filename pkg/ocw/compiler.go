@@ -10,95 +10,6 @@ import (
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
-// Runtime is the interface for executing steps.
-type Runtime interface {
-	Run(ctx context.Context, step *schema.RunStep, env map[string]string) error
-	Build(ctx context.Context, step *schema.BuildStep, env map[string]string) error
-}
-
-// ocwStep adapts an OCW leaf step into a go-workflow Steper.
-type ocwStep struct {
-	name string
-	do   func(ctx context.Context) error
-}
-
-func (s *ocwStep) String() string { return s.name }
-func (s *ocwStep) Do(ctx context.Context) error {
-	return s.do(ctx)
-}
-
-// evalStep evaluates an expression and stores the result for switch branching.
-type evalStep struct {
-	expr   string
-	result string
-}
-
-func (e *evalStep) String() string { return "eval: " + e.expr }
-func (e *evalStep) Do(_ context.Context) error {
-	e.result = e.eval()
-	return nil
-}
-func (e *evalStep) Result() string { return e.result }
-
-func (e *evalStep) eval() string {
-	expr := strings.TrimSpace(e.expr)
-	if strings.HasPrefix(expr, "{{") && strings.HasSuffix(expr, "}}") {
-		inner := strings.TrimSpace(expr[2 : len(expr)-2])
-		if strings.HasPrefix(inner, "env.") {
-			key := strings.TrimPrefix(inner, "env.")
-			if val := os.Getenv(key); val != "" {
-				return val
-			}
-		}
-	}
-	return expr
-}
-
-// switchStep compiles an OCW switch into a go-workflow Switch branch.
-type switchStep struct {
-	flow.SubWorkflow
-	evalExpr string
-	cases    map[string]flow.Steper
-	def      flow.Steper
-}
-
-func (s *switchStep) BuildStep() {
-	s.Reset()
-	eval := &evalStep{expr: s.evalExpr}
-	sw := flow.Switch(eval)
-	for caseValue, caseStep := range s.cases {
-		sw.Case(caseStep, func(_ context.Context, e *evalStep) (bool, error) {
-			return e.Result() == caseValue, nil
-		})
-	}
-	if s.def != nil {
-		sw.Default(s.def)
-	}
-	s.Add(sw)
-}
-
-// parallelStep runs nested steps in parallel.
-type parallelStep struct {
-	flow.SubWorkflow
-	steps []flow.Steper
-}
-
-func (p *parallelStep) BuildStep() {
-	p.Reset()
-	p.Add(flow.Steps(p.steps...))
-}
-
-// sequenceStep runs nested steps in sequence.
-type sequenceStep struct {
-	flow.SubWorkflow
-	steps []flow.Steper
-}
-
-func (s *sequenceStep) BuildStep() {
-	s.Reset()
-	s.Add(flow.Pipe(s.steps...))
-}
-
 // CompileJob turns an OCW job into a *flow.Workflow.
 func CompileJob(job *schema.Job, exec Runtime) (*flow.Workflow, error) {
 	w := new(flow.Workflow)
@@ -166,6 +77,86 @@ func CompileOCW(ocw *schema.OCW, exec Runtime) (*flow.Workflow, error) {
 		return nil, fmt.Errorf("unsupported flow type: %q", flowType)
 	}
 	return w, nil
+}
+
+// ocwStep adapts an OCW leaf step into a go-workflow Steper.
+type ocwStep struct {
+	name string
+	do   func(ctx context.Context) error
+}
+
+func (s *ocwStep) String() string { return s.name }
+func (s *ocwStep) Do(ctx context.Context) error {
+	return s.do(ctx)
+}
+
+// evalStep evaluates an expression and stores the result for switch branching.
+type evalStep struct {
+	expr   string
+	result string
+}
+
+func (e *evalStep) String() string { return "eval: " + e.expr }
+func (e *evalStep) Do(_ context.Context) error {
+	e.result = e.eval()
+	return nil
+}
+func (e *evalStep) Result() string { return e.result }
+
+func (e *evalStep) eval() string {
+	expr := strings.TrimSpace(e.expr)
+	if strings.HasPrefix(expr, "{{") && strings.HasSuffix(expr, "}}") {
+		inner := strings.TrimSpace(expr[2 : len(expr)-2])
+		if strings.HasPrefix(inner, "env.") {
+			key := strings.TrimPrefix(inner, "env.")
+			if val := os.Getenv(key); val != "" {
+				return val
+			}
+		}
+	}
+	return expr
+}
+
+// switchStep compiles an OCW switch into a go-workflow Switch branch.
+type switchStep struct {
+	flow.SubWorkflow
+	evalExpr string
+	cases    map[string]flow.Steper
+	def      flow.Steper
+}
+
+func (s *switchStep) BuildStep() {
+	eval := &evalStep{expr: s.evalExpr}
+	sw := flow.Switch(eval)
+	for caseValue, caseStep := range s.cases {
+		sw.Case(caseStep, func(_ context.Context, e *evalStep) (bool, error) {
+			return e.Result() == caseValue, nil
+		})
+	}
+	if s.def != nil {
+		sw.Default(s.def)
+	}
+	s.Add(sw)
+}
+
+// parallelStep runs nested steps in parallel.
+type parallelStep struct {
+	flow.SubWorkflow
+	steps []flow.Steper
+}
+
+func (p *parallelStep) BuildStep() {
+	p.Add(flow.Steps(p.steps...))
+}
+
+// sequenceStep runs nested steps in sequence.
+type sequenceStep struct {
+	flow.SubWorkflow
+	steps []flow.Steper
+}
+
+func (s *sequenceStep) BuildStep() {
+	s.Add(flow.Pipe(s.steps...))
 }
 
 func compileSteps(steps []schema.Step, exec Runtime) ([]flow.Steper, error) {

@@ -7,6 +7,7 @@ import (
 
 	flow "github.com/Azure/go-workflow"
 	"github.com/spf13/cobra"
+	"github.com/uncloud-cc/ocw/internal"
 	"github.com/uncloud-cc/ocw/pkg/ocw"
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
@@ -48,7 +49,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("validate: %w", err)
 		}
 
-		exec := &ocw.DummyExec{}
+		exec := &internal.DummyRuntime{}
 
 		var workflow *flow.Workflow
 		if jobName != "" {
