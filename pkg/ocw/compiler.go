@@ -196,6 +196,8 @@ func compileRunStep(s *schema.RunStep, exec Runtime) (flow.Steper, error) {
 	return &ocwStep{
 		name: name,
 		do: func(ctx context.Context) error {
+			fmt.Printf("\nTriggering run step with step state: %v\n\n", s)
+			// TODO: Make sure we interpolate all template values here before we run this thing!
 			return exec.Run(ctx, s, nil)
 		},
 	}, nil
@@ -209,6 +211,7 @@ func compileBuildStep(s *schema.BuildStep, exec Runtime) (flow.Steper, error) {
 	return &ocwStep{
 		name: name,
 		do: func(ctx context.Context) error {
+			fmt.Printf("\nTriggering build step with step state: %v\n\n", s)
 			return exec.Build(ctx, s, nil)
 		},
 	}, nil
