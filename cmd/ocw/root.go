@@ -51,16 +51,27 @@ var rootCmd = &cobra.Command{
 
 		exec := &internal.DummyRuntime{}
 
+		envMap := make(map[string]string, len(schema.Env))
+		for k, v := range schema.Env {
+			envMap[k] = v.Value
+		}
+
+		state := &ocw.State{
+			Meta:  map[string]string{"name": schema.Name, "id": schema.ID},
+			Env:   envMap,
+			Steps: make(map[string]map[string]string),
+		}
+
 		var workflow *flow.Workflow
 		if jobName != "" {
 			job := ocw.GetJob(schema, jobName)
 			if job == nil {
 				return fmt.Errorf("job %q not found in %s", jobName, filePath)
 			}
-			workflow, err = ocw.CompileJob(job, exec)
+			workflow, err = ocw.CompileJob(job, exec, state)
 		} else {
 			if ocw.HasDirectFlow(schema) {
-				workflow, err = ocw.CompileOCW(schema, exec)
+				workflow, err = ocw.CompileOCW(schema, exec, state)
 			} else if ocw.HasJobs(schema) {
 				return listJobsInFile(filePath, schema)
 			} else {

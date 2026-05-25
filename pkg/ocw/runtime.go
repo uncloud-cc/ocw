@@ -8,6 +8,6 @@ import (
 
 // Runtime is the interface for executing steps.
 type Runtime interface {
-	Run(ctx context.Context, step *schema.RunStep, env map[string]string) error
-	Build(ctx context.Context, step *schema.BuildStep, env map[string]string) error
+	Run(ctx context.Context, step *schema.RunStep, state *State) (map[string]string, error)
+	Build(ctx context.Context, step *schema.BuildStep, state *State) (map[string]string, error)
 }

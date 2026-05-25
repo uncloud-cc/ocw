@@ -4,18 +4,19 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/uncloud-cc/ocw/pkg/ocw"
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
 // DummyRuntime can be used as test for mocks
 type DummyRuntime struct{}
 
-func (d *DummyRuntime) Run(ctx context.Context, step *schema.RunStep, env map[string]string) error {
+func (d *DummyRuntime) Run(ctx context.Context, step *schema.RunStep, state *ocw.State) (map[string]string, error) {
 	fmt.Printf(">>> RUN: %s (image=%s, cmd=%q)\n", step.Name, step.Image, step.Cmd)
-	return nil
+	return nil, nil
 }
 
-func (d *DummyRuntime) Build(ctx context.Context, step *schema.BuildStep, env map[string]string) error {
+func (d *DummyRuntime) Build(ctx context.Context, step *schema.BuildStep, state *ocw.State) (map[string]string, error) {
 	fmt.Printf(">>> BUILD: %s (image=%s, dockerfile=%s)\n", step.Name, step.Build.Image, step.Build.Dockerfile)
-	return nil
+	return nil, nil
 }

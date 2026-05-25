@@ -3,6 +3,6 @@ sequence:
   - name: Show Templates
     image: alpine:latest
     cmd: |
-      echo "Workflow: {{ workflow.name }}"
+      echo "Workflow: {{ meta.name }}"
       echo "User: {{ env.USER }}"
       echo "Home: {{ env.HOME }}"
