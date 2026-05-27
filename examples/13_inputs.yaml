@@ -1,7 +1,9 @@
 # 13_env_secrets.yaml
 name: Environment and Secrets Demo
 
-env:
+# inputs can be set in various ways - including as environment variables
+# through an .env file or by specifying a JSON file as input.
+inputs:
   # Regular env vars (not masked in output)
   DB_PORT: 8080
   DB_USER: admin

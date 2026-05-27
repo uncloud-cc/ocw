@@ -15,12 +15,11 @@ type OCW struct {
 	ID ID `yaml:"id,omitempty" json:"id,omitempty" jsonschema:"pattern=^[A-Za-z_][A-Za-z0-9_]*$"`
 	// Description is an optional human readable description
 	Description Description `yaml:"description,omitempty" json:"description,omitempty"`
+
 	// Config is optional workflow-level configuration
 	Config Config `yaml:"config,omitempty" json:"config,omitempty"`
-	// Env are optional environment variables
-	Env Env `yaml:"env,omitempty" json:"env,omitempty"`
-	// Secrets are optional secrets
-	Secrets Secrets `yaml:"secrets,omitempty" json:"secrets,omitempty"`
+	// Inputs are optional workflow inputs & secrets
+	Inputs Inputs `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 	// Outputs are optional workflow outputs
 	Outputs Outputs `yaml:"outputs,omitempty" json:"outputs,omitempty"`
 

@@ -13,7 +13,7 @@ type StepBase struct {
 	// Config is optional step-level configuration
 	Config Config `yaml:"config,omitempty" json:"config,omitempty"`
 	// Env are optional environment variables
-	Env Env `yaml:"env,omitempty" json:"env,omitempty"`
+	Env Inputs `yaml:"env,omitempty" json:"env,omitempty"`
 	// Secrets are optional secrets
 	Secrets Secrets `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	// Needs lists service IDs that must be healthy before this step runs.
@@ -33,7 +33,7 @@ type OptionalStepBase struct {
 	// Config is optional step-level configuration
 	Config Config `yaml:"config,omitempty" json:"config,omitempty"`
 	// Env are optional environment variables
-	Env Env `yaml:"env,omitempty" json:"env,omitempty"`
+	Env Inputs `yaml:"env,omitempty" json:"env,omitempty"`
 	// Secrets are optional secrets
 	Secrets Secrets `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	// Needs lists service IDs that must be healthy before this step runs.

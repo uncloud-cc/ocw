@@ -1,4 +1,9 @@
-# Rewrite using TDAID
+# TDD based rewrite
+- "env" doesn't make any sense for the workflow inputs since they shadow the real env vars that exist inside each container 👉🏻 Instead we'll do inputs which can be defined and can be defined as plain-text inputs available via `{{ input.<name> }}` or via `{{ secret.<name> }}`
+
+
+
+---------
 - [x] Basic structure (cleanup schema, add parsing files to OCW)
 
 **Workflow engine**

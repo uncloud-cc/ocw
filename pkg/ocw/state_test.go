@@ -16,11 +16,12 @@ func TestInterpolateTemplate(t *testing.T) {
 	}{
 		{
 			name:  "All namespaces work",
-			input: "{{ meta.job }}-{{ env.SOMETHING }}-{{ steps.build.id }}",
+			input: "{{ meta.job }}-{{ inputs.SOMETHING }}-{{ steps.build.id }}",
 			state: &State{
-				Meta:  map[string]string{"job": "<jobName>"},
-				Env:   map[string]string{"SOMETHING": "<env>"},
-				Steps: map[string]map[string]string{"build": {"id": "<stepOutput>"}},
+				Meta:    map[string]string{"job": "<jobName>"},
+				Inputs:  map[string]string{"SOMETHING": "<env>"},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{"build": {"id": "<stepOutput>"}},
 			},
 			expected:    "<jobName>-<env>-<stepOutput>",
 			expectedErr: nil,
@@ -29,9 +30,10 @@ func TestInterpolateTemplate(t *testing.T) {
 			name:  "String without templates returns the same string without complaints",
 			input: "Look ma, no templates!",
 			state: &State{
-				Meta:  map[string]string{},
-				Env:   map[string]string{},
-				Steps: map[string]map[string]string{},
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
 			},
 			expected:    "Look ma, no templates!",
 			expectedErr: nil,
@@ -40,31 +42,34 @@ func TestInterpolateTemplate(t *testing.T) {
 			name:  "Returns error when it can't find meta key",
 			input: "{{ meta.doesNotExist }}",
 			state: &State{
-				Meta:  map[string]string{},
-				Env:   map[string]string{},
-				Steps: map[string]map[string]string{},
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
 			},
 			expected:    "",
 			expectedErr: fmt.Errorf("Could not find key 'doesNotExist' in meta namespace"),
 		},
 		{
-			name:  "Returns error when it can't find env key",
-			input: "{{ env.doesNotExist }}",
+			name:  "Returns error when it can't find inputs key",
+			input: "{{ inputs.doesNotExist }}",
 			state: &State{
-				Meta:  map[string]string{},
-				Env:   map[string]string{},
-				Steps: map[string]map[string]string{},
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
 			},
 			expected:    "",
-			expectedErr: fmt.Errorf("Could not find key 'doesNotExist' in env namespace"),
+			expectedErr: fmt.Errorf("Could not find key 'doesNotExist' in inputs"),
 		},
 		{
 			name:  "Returns error when there's not enough parts in referencing step output",
 			input: "{{ steps.notEnoughParts }}",
 			state: &State{
-				Meta:  map[string]string{},
-				Env:   map[string]string{},
-				Steps: map[string]map[string]string{},
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
 			},
 			expected:    "",
 			expectedErr: fmt.Errorf("Step output references in templates need three parts: {{ steps.<stepId>.<key> }} (e.g. {{ steps.build.image }})"),
@@ -73,9 +78,10 @@ func TestInterpolateTemplate(t *testing.T) {
 			name:  "Returns error when it can't find specified step in outputs",
 			input: "{{ steps.doesNotExist.output }}",
 			state: &State{
-				Meta:  map[string]string{},
-				Env:   map[string]string{},
-				Steps: map[string]map[string]string{},
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
 			},
 			expected:    "",
 			expectedErr: fmt.Errorf("Could not any outputs for step 'doesNotExist'"),
@@ -84,12 +90,37 @@ func TestInterpolateTemplate(t *testing.T) {
 			name:  "Returns error when it can't find key in step outputs",
 			input: "{{ steps.mystep.outputValue }}",
 			state: &State{
-				Meta:  map[string]string{},
-				Env:   map[string]string{},
-				Steps: map[string]map[string]string{"mystep": {}},
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{"mystep": {}},
 			},
 			expected:    "",
 			expectedErr: fmt.Errorf("Could not find key 'outputValue' in step outputs for step 'mystep'"),
+		},
+		{
+			name:  "Secrets namespace works",
+			input: "{{ secrets.API_KEY }}",
+			state: &State{
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{"API_KEY": "secret123"},
+				Steps:   map[string]map[string]string{},
+			},
+			expected:    "secret123",
+			expectedErr: nil,
+		},
+		{
+			name:  "Returns error when it can't find secrets key",
+			input: "{{ secrets.doesNotExist }}",
+			state: &State{
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
+			},
+			expected:    "",
+			expectedErr: fmt.Errorf("Could not find key 'doesNotExist' in secrets"),
 		},
 	}
 
@@ -254,9 +285,10 @@ func TestState_Clone(t *testing.T) {
 		{
 			name: "clone is independent of original",
 			original: &State{
-				Meta:  map[string]string{"name": "workflow"},
-				Env:   map[string]string{"KEY": "val"},
-				Steps: map[string]map[string]string{"build": {"image": "img"}},
+				Meta:    map[string]string{"name": "workflow"},
+				Inputs:  map[string]string{"KEY": "val"},
+				Secrets: map[string]string{"API_KEY": "secret"},
+				Steps:   map[string]map[string]string{"build": {"image": "img"}},
 			},
 			mutateClone: true,
 			mutateOrig:  false,
@@ -264,9 +296,10 @@ func TestState_Clone(t *testing.T) {
 		{
 			name: "original mutation does not affect clone",
 			original: &State{
-				Meta:  map[string]string{"name": "workflow"},
-				Env:   map[string]string{"KEY": "val"},
-				Steps: map[string]map[string]string{"build": {"image": "img"}},
+				Meta:    map[string]string{"name": "workflow"},
+				Inputs:  map[string]string{"KEY": "val"},
+				Secrets: map[string]string{"API_KEY": "secret"},
+				Steps:   map[string]map[string]string{"build": {"image": "img"}},
 			},
 			mutateClone: false,
 			mutateOrig:  true,
@@ -281,8 +314,11 @@ func TestState_Clone(t *testing.T) {
 			if !reflect.DeepEqual(clone.Meta, tt.original.Meta) {
 				t.Errorf("clone.Meta != original.Meta initially")
 			}
-			if !reflect.DeepEqual(clone.Env, tt.original.Env) {
-				t.Errorf("clone.Env != original.Env initially")
+			if !reflect.DeepEqual(clone.Inputs, tt.original.Inputs) {
+				t.Errorf("clone.Inputs != original.Inputs initially")
+			}
+			if !reflect.DeepEqual(clone.Secrets, tt.original.Secrets) {
+				t.Errorf("clone.Secrets != original.Secrets initially")
 			}
 			if !reflect.DeepEqual(clone.Steps, tt.original.Steps) {
 				t.Errorf("clone.Steps != original.Steps initially")
@@ -290,15 +326,19 @@ func TestState_Clone(t *testing.T) {
 
 			if tt.mutateClone {
 				clone.Meta["name"] = "mutated"
-				clone.Env["KEY"] = "mutated"
+				clone.Inputs["KEY"] = "mutated"
+				clone.Secrets["API_KEY"] = "mutated"
 				clone.Steps["build"]["image"] = "mutated"
 				clone.Steps["new"] = map[string]string{"x": "y"}
 
 				if reflect.DeepEqual(clone.Meta, tt.original.Meta) {
 					t.Errorf("clone.Meta mutation leaked to original")
 				}
-				if reflect.DeepEqual(clone.Env, tt.original.Env) {
-					t.Errorf("clone.Env mutation leaked to original")
+				if reflect.DeepEqual(clone.Inputs, tt.original.Inputs) {
+					t.Errorf("clone.Inputs mutation leaked to original")
+				}
+				if reflect.DeepEqual(clone.Secrets, tt.original.Secrets) {
+					t.Errorf("clone.Secrets mutation leaked to original")
 				}
 				if reflect.DeepEqual(clone.Steps, tt.original.Steps) {
 					t.Errorf("clone.Steps mutation leaked to original")
@@ -307,15 +347,19 @@ func TestState_Clone(t *testing.T) {
 
 			if tt.mutateOrig {
 				tt.original.Meta["name"] = "mutated"
-				tt.original.Env["KEY"] = "mutated"
+				tt.original.Inputs["KEY"] = "mutated"
+				tt.original.Secrets["API_KEY"] = "mutated"
 				tt.original.Steps["build"]["image"] = "mutated"
 				tt.original.Steps["new"] = map[string]string{"x": "y"}
 
 				if reflect.DeepEqual(clone.Meta, tt.original.Meta) {
 					t.Errorf("original.Meta mutation leaked to clone")
 				}
-				if reflect.DeepEqual(clone.Env, tt.original.Env) {
-					t.Errorf("original.Env mutation leaked to clone")
+				if reflect.DeepEqual(clone.Inputs, tt.original.Inputs) {
+					t.Errorf("original.Inputs mutation leaked to clone")
+				}
+				if reflect.DeepEqual(clone.Secrets, tt.original.Secrets) {
+					t.Errorf("original.Secrets mutation leaked to clone")
 				}
 				if reflect.DeepEqual(clone.Steps, tt.original.Steps) {
 					t.Errorf("original.Steps mutation leaked to clone")

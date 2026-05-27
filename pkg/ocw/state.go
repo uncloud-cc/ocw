@@ -11,8 +11,10 @@ import (
 type State struct {
 	// Meta stores some meta information about the workflow (e.g. job name)
 	Meta map[string]string
-	// Env stores the environemnt variables that were declared at the top of the workflow
-	Env map[string]string
+	// Inputs stores the input variables declared in the "inputs" section
+	Inputs map[string]string
+	// Secrets stores the secrets declared in the "inputs" section
+	Secrets map[string]string
 	// Steps stores the output of steps
 	Steps map[string]map[string]string
 
@@ -47,11 +49,19 @@ func (s *State) InterpolateTemplate(input string) (string, error) {
 				return ""
 			}
 			return value
-		case "env":
+		case "inputs":
 			key := parts[1]
-			value, exists := s.Env[key]
+			value, exists := s.Inputs[key]
 			if !exists {
-				err = fmt.Errorf("Could not find key '%s' in env namespace", key)
+				err = fmt.Errorf("Could not find key '%s' in inputs", key)
+				return ""
+			}
+			return value
+		case "secrets":
+			key := parts[1]
+			value, exists := s.Secrets[key]
+			if !exists {
+				err = fmt.Errorf("Could not find key '%s' in secrets", key)
 				return ""
 			}
 			return value
@@ -77,7 +87,7 @@ func (s *State) InterpolateTemplate(input string) (string, error) {
 			return value
 		}
 
-		err = fmt.Errorf("Unknown template namespace '%s' - has to be one of meta, env, steps", namespace)
+		err = fmt.Errorf("Unknown template namespace '%s' - has to be one of meta, inputs, secrets, steps", namespace)
 		return ""
 	})
 
@@ -118,15 +128,19 @@ func (s *State) Clone() *State {
 	defer s.mu.RUnlock()
 
 	cloned := &State{
-		Meta:  make(map[string]string, len(s.Meta)),
-		Env:   make(map[string]string, len(s.Env)),
-		Steps: make(map[string]map[string]string, len(s.Steps)),
+		Meta:    make(map[string]string, len(s.Meta)),
+		Inputs:  make(map[string]string, len(s.Inputs)),
+		Secrets: make(map[string]string, len(s.Secrets)),
+		Steps:   make(map[string]map[string]string, len(s.Steps)),
 	}
 	for k, v := range s.Meta {
 		cloned.Meta[k] = v
 	}
-	for k, v := range s.Env {
-		cloned.Env[k] = v
+	for k, v := range s.Inputs {
+		cloned.Inputs[k] = v
+	}
+	for k, v := range s.Secrets {
+		cloned.Secrets[k] = v
 	}
 	for stepID, outputs := range s.Steps {
 		cloned.Steps[stepID] = make(map[string]string, len(outputs))

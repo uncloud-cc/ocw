@@ -21,7 +21,7 @@ type WorkflowConfig struct {
 	// From is the workflow reference (local path or import path like github.com/org/repo/workflow)
 	From string `yaml:"from" json:"from" jsonschema:"required"`
 	// Env are environment variables to pass to the workflow
-	Env Env `yaml:"env,omitempty" json:"env,omitempty"`
+	Env Inputs `yaml:"env,omitempty" json:"env,omitempty"`
 	// Secrets are secrets to pass to the workflow
 	Secrets Secrets `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	// Inherit specifies what to inherit from the parent workflow

@@ -51,15 +51,21 @@ var rootCmd = &cobra.Command{
 
 		exec := &internal.DummyRuntime{}
 
-		envMap := make(map[string]string, len(schema.Env))
-		for k, v := range schema.Env {
-			envMap[k] = v.Value
+		inputsMap := make(map[string]string, len(schema.Inputs))
+		secretsMap := make(map[string]string, len(schema.Inputs))
+		for k, v := range schema.Inputs {
+			if v.IsSecret {
+				secretsMap[k] = v.Value
+			} else {
+				inputsMap[k] = v.Value
+			}
 		}
 
 		state := &ocw.State{
-			Meta:  map[string]string{"name": schema.Name, "id": schema.ID},
-			Env:   envMap,
-			Steps: make(map[string]map[string]string),
+			Meta:    map[string]string{"name": schema.Name, "id": schema.ID},
+			Inputs:  inputsMap,
+			Secrets: secretsMap,
+			Steps:   make(map[string]map[string]string),
 		}
 
 		var workflow *flow.Workflow
