@@ -106,13 +106,9 @@ func (e *evalStep) Result() string { return e.result }
 func (e *evalStep) eval() string {
 	expr := strings.TrimSpace(e.expr)
 
-	// Try template interpolation first
-	if strings.HasPrefix(expr, "{{") && strings.HasSuffix(expr, "}}") {
-		resolved, err := e.state.InterpolateTemplate(expr)
-		if err == nil {
-			return resolved
-		}
-		// Fall through to literal evaluation on error
+	resolved, err := e.state.InterpolateTemplate(expr)
+	if err == nil && resolved != "" {
+		return resolved
 	}
 
 	return expr
@@ -206,7 +202,7 @@ func compileRunStep(s *schema.RunStep, exec Runtime, state *State) (flow.Steper,
 				fmt.Printf("Interpolated cmd:\n%s\n\n", cmdParsed)
 			}
 
-			outputs, err := exec.Run(ctx, s, state)
+			outputs, err := exec.Run(ctx, s)
 			if err != nil {
 				return err
 			}
@@ -229,7 +225,7 @@ func compileBuildStep(s *schema.BuildStep, exec Runtime, state *State) (flow.Ste
 		do: func(ctx context.Context) error {
 			fmt.Printf("\nTriggering build step with step state: %v\n\n", s)
 
-			outputs, err := exec.Build(ctx, s, state)
+			outputs, err := exec.Build(ctx, s)
 			if err != nil {
 				return err
 			}

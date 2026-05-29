@@ -1,5 +1,5 @@
 # 13_env_secrets.yaml
-name: Environment and Secrets Demo
+name: Inputs, secrets and outputs demo
 
 # inputs can be set in various ways - including as environment variables
 # through an .env file or by specifying a JSON file as input.
@@ -23,7 +23,7 @@ sequence:
   - name: Show Values
     image: alpine:latest
     cmd: |
-      echo "DB port: {{ env.DB_PORT }}"
-      echo "DB user: {{ env.DB_USER }}"
-      echo "DB password: {{ env.DB_PASSWORD }}"
+      echo "DB port: {{ inputs.DB_PORT }}"
+      echo "DB user: {{ inputs.DB_USER }}"
+      echo "DB password: {{ secrets.DB_PASSWORD }}"
       echo "API key: {{ secrets.API_KEY }}"

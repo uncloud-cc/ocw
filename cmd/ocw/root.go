@@ -7,7 +7,6 @@ import (
 
 	flow "github.com/Azure/go-workflow"
 	"github.com/spf13/cobra"
-	"github.com/uncloud-cc/ocw/internal"
 	"github.com/uncloud-cc/ocw/pkg/ocw"
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
@@ -49,7 +48,15 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("validate: %w", err)
 		}
 
-		exec := &internal.DummyRuntime{}
+		workflowDir, err := filepath.Abs(filepath.Dir(filePath))
+		if err != nil {
+			return fmt.Errorf("resolve workflow directory: %w", err)
+		}
+		exec, err := ocw.NewDockerRuntime(schema.Volumes, workflowDir)
+		if err != nil {
+			return fmt.Errorf("runtime: %w", err)
+		}
+		defer exec.Close()
 
 		inputsMap := make(map[string]string, len(schema.Inputs))
 		secretsMap := make(map[string]string, len(schema.Inputs))
