@@ -1,4 +1,6 @@
 # TDD based rewrite
+> It doesn't have to be perfect. Just good enough to use in production.
+
 Comprehensive rewrite of the first version of ocw.
 
 ## TODOs
@@ -8,14 +10,19 @@ Comprehensive rewrite of the first version of ocw.
 - [ ] Implement `/workflow` mount
 - [ ] Implement volume mounts
 - [ ] Implement service (background) containers
+- [ ] Implement imported workflows
+- [ ] Implement Github Action
 
 **Out of scope for v1**
-- [ ] Step by step debugger?
+- [ ] Step by step debugger
+- [ ] Debugging containers
+- [ ] Reloading containers on file changes
+- [ ] Observing filesystem changes (to audit workflows)
+- [ ] Outgoing network firewall
+- [ ] Configs / Middleware / Plugins
 
 ## Notes
 - "env" doesn't make any sense for the workflow inputs since they shadow the real env vars that exist inside each container 👉🏻 Instead we'll do inputs which can be defined and can be defined as plain-text inputs available via `{{ input.<name> }}` or via `{{ secret.<name> }}`
-
-
 
 ---------
 - [x] Basic structure (cleanup schema, add parsing files to OCW)

@@ -13,9 +13,12 @@ type StepBase struct {
 	// Config is optional step-level configuration
 	Config Config `yaml:"config,omitempty" json:"config,omitempty"`
 	// Env are optional environment variables
-	Env Inputs `yaml:"env,omitempty" json:"env,omitempty"`
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+	// EnvFile is one or more environment files from workspace
+	// Useful for config assembled by previous steps
+	EnvFile *StringOrStringSlice `yaml:"envFile,omitempty" json:"envFile,omitempty"`
 	// Secrets are optional secrets
-	Secrets Secrets `yaml:"secrets,omitempty" json:"secrets,omitempty"`
+	Secrets map[string]string `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	// Needs lists service IDs that must be healthy before this step runs.
 	// All services are implicitly available to all steps on the internal network.
 	// Use Needs only when this step must wait for specific services to be ready.
@@ -34,6 +37,9 @@ type OptionalStepBase struct {
 	Config Config `yaml:"config,omitempty" json:"config,omitempty"`
 	// Env are optional environment variables
 	Env Inputs `yaml:"env,omitempty" json:"env,omitempty"`
+	// EnvFile is one or more environment files from workspace
+	// Useful for config assembled by previous steps
+	EnvFile *StringOrStringSlice `yaml:"envFile,omitempty" json:"envFile,omitempty"`
 	// Secrets are optional secrets
 	Secrets Secrets `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	// Needs lists service IDs that must be healthy before this step runs.

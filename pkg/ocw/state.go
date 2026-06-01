@@ -42,6 +42,7 @@ func (s *State) InterpolateTemplate(input string) (string, error) {
 
 		switch namespace {
 		case "meta":
+			// TODO: Just make the "meta" stuff part of the inputs?
 			key := parts[1]
 			value, exists := s.Meta[key]
 			if !exists {

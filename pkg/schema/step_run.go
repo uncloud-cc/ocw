@@ -148,14 +148,6 @@ type RunStep struct {
 	// Requires background: true. Can be bool, glob pattern(s), or full config.
 	Watch *Watch `yaml:"watch,omitempty" json:"watch,omitempty"`
 
-	// === Environment ===
-	// RunEnv are environment variables (supports both map and array format)
-	// Extends workflow-level env
-	RunEnv *StringMapOrSlice `yaml:"env,omitempty" json:"env,omitempty"`
-	// EnvFile is one or more environment files from workspace
-	// Useful for config assembled by previous steps
-	EnvFile *StringOrStringSlice `yaml:"envFile,omitempty" json:"envFile,omitempty"`
-
 	// === Resource Limits ===
 	// CPUs is the number of CPUs
 	CPUs *NumberOrString `yaml:"cpus,omitempty" json:"cpus,omitempty"`
