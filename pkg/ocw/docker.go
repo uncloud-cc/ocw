@@ -93,6 +93,8 @@ func (d *DockerRuntime) buildRunArgs(step *schema.RunStep, outputsFile string) [
 
 	if step.Workdir != "" {
 		args = append(args, "-w", step.Workdir)
+	} else {
+		args = append(args, "-w", "/workflow")
 	}
 	// Env from StepBase (already interpolated by interpolateStepbase)
 	for k, v := range step.Env {
