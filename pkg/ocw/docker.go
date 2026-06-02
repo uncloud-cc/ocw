@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/uncloud-cc/ocw/pkg/schema"
@@ -148,9 +149,20 @@ func (d *DockerRuntime) buildBuildArgs(step *schema.BuildStep) []string {
 	if contextPath == "" {
 		contextPath = d.workflowDir
 	}
+
+	// Resolve context path to absolute for path calculations
+	absContext := contextPath
+	if !filepath.IsAbs(absContext) {
+		absContext = filepath.Join(d.workflowDir, absContext)
+	}
+
 	args := []string{"build", "-t", step.Build.Image}
 	if step.Build.Dockerfile != "" {
-		args = append(args, "-f", step.Build.Dockerfile)
+		dockerfile := step.Build.Dockerfile
+		if !filepath.IsAbs(dockerfile) {
+			dockerfile = filepath.Join(absContext, dockerfile)
+		}
+		args = append(args, "-f", dockerfile)
 	}
 	args = append(args, contextPath)
 	return args

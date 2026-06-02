@@ -4,11 +4,11 @@ sequence:
     id: build
     build:
       image: ocw-tutorials/context
-      dockerfile: context/Dockerfile
+      dockerfile: Dockerfile
       context: ./context
 
-  - name: Run the container
+  - name: Run with greeting
     id: run
     image: "{{ steps.build.image }}"
-    background: true
-    expose: 80
+    env:
+      NAME: "Mr. 🤖"

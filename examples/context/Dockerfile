@@ -1,3 +1,4 @@
-FROM nginx
-COPY hello.html /usr/share/nginx/html/index.html
-EXPOSE 80
+FROM alpine
+COPY greeting.tmpl /app/
+WORKDIR /app
+CMD ["sh", "-c", "sed \"s/__NAME__/$NAME/g\" /app/greeting.tmpl && echo"]
