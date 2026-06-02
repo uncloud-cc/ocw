@@ -31,10 +31,17 @@ func (d *DockerRuntime) Run(ctx context.Context, step *schema.RunStep) (map[stri
 	if step.Background {
 		return nil, fmt.Errorf("background containers are not yet supported")
 	}
-	if err := d.execDocker(ctx, "run", d.buildRunArgs(step)...); err != nil {
+
+	outputsFile, err := createTempOutputsFile()
+	if err != nil {
 		return nil, err
 	}
-	return map[string]string{}, nil
+	defer os.Remove(outputsFile)
+
+	if err := d.execDocker(ctx, "run", d.buildRunArgs(step, outputsFile)...); err != nil {
+		return nil, err
+	}
+	return parseOutputsFile(outputsFile)
 }
 
 func (d *DockerRuntime) Build(ctx context.Context, step *schema.BuildStep) (map[string]string, error) {
@@ -72,9 +79,18 @@ func (d *DockerRuntime) Build(ctx context.Context, step *schema.BuildStep) (map[
 
 // buildRunArgs translates a RunStep into the docker CLI args.
 // Pure function: easy to unit-test without touching docker.
-func (d *DockerRuntime) buildRunArgs(step *schema.RunStep) []string {
+func (d *DockerRuntime) buildRunArgs(step *schema.RunStep, outputsFile string) []string {
 	args := []string{"run", "--rm"}
 	args = append(args, "-v", d.workflowDir+":/workflow")
+
+	if outputsFile != "" {
+		const containerPath = "/tmp/ocw-outputs"
+		args = append(args,
+			"-v", outputsFile+":"+containerPath,
+			"-e", "OUTPUTS="+containerPath,
+		)
+	}
+
 	if step.Workdir != "" {
 		args = append(args, "-w", step.Workdir)
 	}
@@ -88,6 +104,41 @@ func (d *DockerRuntime) buildRunArgs(step *schema.RunStep) []string {
 		args = append(args, "sh", "-c", step.Cmd)
 	}
 	return args
+}
+
+// createTempOutputsFile creates an empty host temp file for a container to write
+// key=value lines into. The caller is responsible for removing it.
+func createTempOutputsFile() (string, error) {
+	f, err := os.CreateTemp("", "ocw-outputs-*")
+	if err != nil {
+		return "", fmt.Errorf("create outputs temp file: %w", err)
+	}
+	name := f.Name()
+	f.Close()
+	return name, nil
+}
+
+// parseOutputsFile reads a file of "key=value" lines into a map.
+// Lines without "=" and empty lines are ignored.
+func parseOutputsFile(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// If the step never wrote to $OUTPUTS, the file is empty.
+		return map[string]string{}, nil
+	}
+
+	out := make(map[string]string)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			out[parts[0]] = parts[1]
+		}
+	}
+	return out, nil
 }
 
 func (d *DockerRuntime) buildBuildArgs(step *schema.BuildStep) []string {

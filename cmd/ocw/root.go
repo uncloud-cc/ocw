@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	flow "github.com/Azure/go-workflow"
@@ -40,11 +41,11 @@ var rootCmd = &cobra.Command{
 			jobName = args[1]
 		}
 
-		schema, err := ocw.ParseFile(filePath)
+		parsed, err := ocw.ParseFile(filePath)
 		if err != nil {
 			return fmt.Errorf("parse: %w", err)
 		}
-		if err := schema.Validate(); err != nil {
+		if err := parsed.Validate(); err != nil {
 			return fmt.Errorf("validate: %w", err)
 		}
 
@@ -52,15 +53,15 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("resolve workflow directory: %w", err)
 		}
-		exec, err := ocw.NewDockerRuntime(schema.Volumes, workflowDir)
+		exec, err := ocw.NewDockerRuntime(parsed.Volumes, workflowDir)
 		if err != nil {
 			return fmt.Errorf("runtime: %w", err)
 		}
 		defer exec.Close()
 
-		inputsMap := make(map[string]string, len(schema.Inputs))
-		secretsMap := make(map[string]string, len(schema.Inputs))
-		for k, v := range schema.Inputs {
+		inputsMap := make(map[string]string, len(parsed.Inputs))
+		secretsMap := make(map[string]string, len(parsed.Inputs))
+		for k, v := range parsed.Inputs {
 			if v.IsSecret {
 				secretsMap[k] = v.Value
 			} else {
@@ -69,24 +70,25 @@ var rootCmd = &cobra.Command{
 		}
 
 		state := &ocw.State{
-			Meta:    map[string]string{"name": schema.Name, "id": schema.ID},
+			Meta:    map[string]string{"name": parsed.Name, "id": parsed.ID},
 			Inputs:  inputsMap,
 			Secrets: secretsMap,
 			Steps:   make(map[string]map[string]string),
 		}
 
 		var workflow *flow.Workflow
+		var job *schema.Job
 		if jobName != "" {
-			job := ocw.GetJob(schema, jobName)
+			job = ocw.GetJob(parsed, jobName)
 			if job == nil {
 				return fmt.Errorf("job %q not found in %s", jobName, filePath)
 			}
 			workflow, err = ocw.CompileJob(job, exec, state)
 		} else {
-			if ocw.HasDirectFlow(schema) {
-				workflow, err = ocw.CompileOCW(schema, exec, state)
-			} else if ocw.HasJobs(schema) {
-				return listJobsInFile(filePath, schema)
+			if ocw.HasDirectFlow(parsed) {
+				workflow, err = ocw.CompileOCW(parsed, exec, state)
+			} else if ocw.HasJobs(parsed) {
+				return listJobsInFile(filePath, parsed)
 			} else {
 				return fmt.Errorf("no workflow flow or jobs found in %s", filePath)
 			}
@@ -97,6 +99,43 @@ var rootCmd = &cobra.Command{
 
 		if err := workflow.Do(cmd.Context()); err != nil {
 			return fmt.Errorf("run: %w", err)
+		}
+
+		// Determine which raw outputs to resolve
+		var rawOutputs map[string]string
+		if jobName != "" {
+			rawOutputs = job.Outputs
+		} else {
+			rawOutputs = parsed.Outputs
+		}
+
+		// Resolve and print
+		if len(rawOutputs) > 0 {
+			resolved, err := ocw.ResolveOutputs(rawOutputs, state)
+			if err != nil {
+				return fmt.Errorf("resolve outputs: %w", err)
+			}
+
+			// Find the longest key
+			maxLen := 0
+			for k := range resolved {
+				if len(k) > maxLen {
+					maxLen = len(k)
+				}
+			}
+
+			// Sort by key
+			keys := make([]string, 0, len(resolved))
+			for k := range resolved {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+
+			// Print with padding
+			fmt.Printf("\nOutputs:\n")
+			for _, k := range keys {
+				fmt.Printf("  %s:%*s%s\n", k, maxLen-len(k)+1, "", resolved[k])
+			}
 		}
 
 		return nil
