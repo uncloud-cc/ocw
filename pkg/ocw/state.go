@@ -2,6 +2,7 @@ package ocw
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -42,7 +43,6 @@ func (s *State) InterpolateTemplate(input string) (string, error) {
 
 		switch namespace {
 		case "meta":
-			// TODO: Just make the "meta" stuff part of the inputs?
 			key := parts[1]
 			value, exists := s.Meta[key]
 			if !exists {
@@ -85,6 +85,10 @@ func (s *State) InterpolateTemplate(input string) (string, error) {
 				err = fmt.Errorf("Could not find key '%s' in step outputs for step '%s'", key, stepId)
 				return ""
 			}
+			return value
+		case "env":
+			key := parts[1]
+			value := os.Getenv(key)
 			return value
 		}
 

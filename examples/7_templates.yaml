@@ -1,6 +1,6 @@
 name: Template Demo
 sequence:
-  - name: Show Templates
+  - name: Demonstrate templates
     image: alpine:latest
     cmd: |
       echo "Workflow: {{ meta.name }}"

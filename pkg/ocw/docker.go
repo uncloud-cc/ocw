@@ -78,7 +78,11 @@ func (d *DockerRuntime) buildRunArgs(step *schema.RunStep) []string {
 	if step.Workdir != "" {
 		args = append(args, "-w", step.Workdir)
 	}
-	// future: env, volumes, entrypoint, expose, ...
+	// Env from StepBase (already interpolated by interpolateStepbase)
+	for k, v := range step.Env {
+		args = append(args, "-e", k+"="+v)
+	}
+	// future: volumes, entrypoint, expose, ...
 	args = append(args, step.Image)
 	if step.Cmd != "" {
 		args = append(args, "sh", "-c", step.Cmd)

@@ -196,7 +196,7 @@ func compileRunStep(s *schema.RunStep, exec Runtime, state *State) (flow.Steper,
 		do: func(ctx context.Context) error {
 			interpolatedSchema, err := interpolateRunStepTemplates(s, state)
 			if err != nil {
-				fmt.Errorf("Error while interpolating template value for step %s: %v", name, err)
+				return fmt.Errorf("Error while interpolating template value for step %s: %v", name, err)
 			}
 
 			outputs, err := exec.Run(ctx, interpolatedSchema)
@@ -286,40 +286,6 @@ func interpolateRunStepTemplates(s *schema.RunStep, state *State) (*schema.RunSt
 		return nil, fmt.Errorf("Interpolation error: %v", err)
 	}
 
-	var runEnv *schema.StringMapOrSlice
-	if s.RunEnv != nil {
-		if s.RunEnv.Map != nil {
-			m := map[string]string{}
-			for k, v := range s.RunEnv.Map {
-				interpolatedKey, err := state.InterpolateTemplate(k)
-				if err != nil {
-					return nil, fmt.Errorf("Interpolation error: %v", err)
-				}
-				interpolatedValue, err := state.InterpolateTemplate(v)
-				if err != nil {
-					return nil, fmt.Errorf("Interpolation error: %v", err)
-				}
-				m[interpolatedKey] = interpolatedValue
-			}
-			runEnv = &schema.StringMapOrSlice{Map: m}
-		}
-		if len(s.RunEnv.Slice) > 0 {
-			sl := []string{}
-			for _, v := range s.RunEnv.Slice {
-				interpolatedValue, err := state.InterpolateTemplate(v)
-				if err != nil {
-					return nil, fmt.Errorf("Interpolation error: %v", err)
-				}
-				sl = append(sl, interpolatedValue)
-			}
-			if runEnv == nil {
-				runEnv = &schema.StringMapOrSlice{Slice: sl}
-			} else {
-				runEnv.Slice = sl
-			}
-		}
-	}
-
 	// Quiet is not interpolated for now
 	// TTY is not interpolated for now
 	// Volumes is not interpolated for now
@@ -334,7 +300,6 @@ func interpolateRunStepTemplates(s *schema.RunStep, state *State) (*schema.RunSt
 		HealthCheck: healthCheck,
 		Platform:    platform,
 		Pull:        schema.PullPolicy(pullPolicy),
-		RunEnv:      runEnv,
 
 		// Not interpolated (for now)
 		Background: s.Background,
@@ -638,18 +603,18 @@ func interpolateBuildStepTemplates(s *schema.BuildStep, state *State) (*schema.B
 	return &schema.BuildStep{
 		StepBase: stepBase,
 		Build: schema.BuildConfig{
-			Image:      image,
-			Context:    contextPath,
-			Dockerfile: dockerfile,
-			Target:     target,
-			BuildArgs:  buildArgs,
-			Platform:   platform,
-			CacheFrom:  cacheFrom,
-			CacheTo:    cacheTo,
-			Tags:       tags,
+			Image:        image,
+			Context:      contextPath,
+			Dockerfile:   dockerfile,
+			Target:       target,
+			BuildArgs:    buildArgs,
+			Platform:     platform,
+			CacheFrom:    cacheFrom,
+			CacheTo:      cacheTo,
+			Tags:         tags,
 			BuildSecrets: buildSecrets,
-			Labels:     labels,
-			Annotation: annotation,
+			Labels:       labels,
+			Annotation:   annotation,
 			BuildContext: buildContext,
 
 			// Not interpolated (for now)
