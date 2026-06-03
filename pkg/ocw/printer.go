@@ -9,38 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/sys/unix"
 )
 
-// ── ANSI color codes ──────────────────────────────────────────
-
-const (
-	reset     = "\033[0m"
-	bold      = "\033[1m"
-	dim       = "\033[2m"
-	italic    = "\033[3m"
-	underline = "\033[4m"
-
-	black   = "\033[30m"
-	red     = "\033[31m"
-	green   = "\033[32m"
-	yellow  = "\033[33m"
-	blue    = "\033[34m"
-	magenta = "\033[35m"
-	cyan    = "\033[36m"
-	white   = "\033[37m"
-
-	brightBlack   = "\033[90m"
-	brightRed     = "\033[91m"
-	brightGreen   = "\033[92m"
-	brightYellow  = "\033[93m"
-	brightBlue    = "\033[94m"
-	brightMagenta = "\033[95m"
-	brightCyan    = "\033[96m"
-	brightWhite   = "\033[97m"
-)
-
-// ── Event types for the JSON protocol ────────────────────────
+// ── Event types for the NDJSON protocol ─────────────────────
 
 const (
 	EventWorkflowStart    = "workflow.start"
@@ -56,30 +29,30 @@ const (
 	EventLogError         = "log.error"
 )
 
-// ── Styles (ANSI formatting) ─────────────────────────────────
+// ── Styles (lipgloss-based) ──────────────────────────────────
 
 type Styles struct {
 	enabled bool
-}
-
-func NewStyles() *Styles {
-	return &Styles{enabled: shouldUseColors()}
-}
-
-func shouldUseColors() bool {
-	if !isTerminal(int(os.Stdout.Fd())) {
-		return false
-	}
-	if noColor, exists := os.LookupEnv("NO_COLOR"); exists && noColor != "" {
-		return false
-	}
-	if os.Getenv("TERM") == "dumb" {
-		return false
-	}
-	if os.Getenv("FORCE_COLOR") != "" {
-		return true
-	}
-	return true
+	// Text styles
+	headerStyle      lipgloss.Style
+	jobHeaderStyle   lipgloss.Style
+	stepHeaderStyle  lipgloss.Style
+	stepNameStyle    lipgloss.Style
+	successStyle     lipgloss.Style
+	errorStyle       lipgloss.Style
+	warningStyle     lipgloss.Style
+	infoStyle        lipgloss.Style
+	dimStyle         lipgloss.Style
+	labelStyle       lipgloss.Style
+	valueStyle       lipgloss.Style
+	commandStyle     lipgloss.Style
+	outputKeyStyle   lipgloss.Style
+	outputValueStyle lipgloss.Style
+	// Box styles
+	jobBoxStyle            lipgloss.Style
+	outputsBoxStyle        lipgloss.Style
+	completionSuccessStyle lipgloss.Style
+	completionErrorStyle   lipgloss.Style
 }
 
 func isTerminal(fd int) bool {
@@ -87,27 +60,80 @@ func isTerminal(fd int) bool {
 	return err == nil
 }
 
-func (s *Styles) style(style, text string) string {
+func NewStyles() *Styles {
+	enabled := isTerminal(int(os.Stdout.Fd()))
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
+		enabled = false
+	}
+	if os.Getenv("FORCE_COLOR") != "" {
+		enabled = true
+	}
+
+	// Adaptive colors that flip between light & dark backgrounds
+	adaptiveWhite := lipgloss.AdaptiveColor{Light: "0", Dark: "15"}   // black / bright white
+	adaptiveGray := lipgloss.AdaptiveColor{Light: "240", Dark: "250"} // dark gray / light gray
+	adaptiveCyan := lipgloss.AdaptiveColor{Light: "6", Dark: "14"}    // cyan / bright cyan
+	adaptiveBlue := lipgloss.AdaptiveColor{Light: "4", Dark: "12"}    // blue / bright blue
+	adaptiveGreen := lipgloss.AdaptiveColor{Light: "2", Dark: "10"}   // green / bright green
+	adaptiveRed := lipgloss.AdaptiveColor{Light: "1", Dark: "9"}      // red / bright red
+	adaptiveYellow := lipgloss.AdaptiveColor{Light: "3", Dark: "11"}  // yellow / bright yellow
+
+	return &Styles{
+		enabled:          enabled,
+		headerStyle:      lipgloss.NewStyle().Bold(true).Foreground(adaptiveWhite),
+		jobHeaderStyle:   lipgloss.NewStyle().Bold(true).Foreground(adaptiveCyan),
+		stepHeaderStyle:  lipgloss.NewStyle().Bold(true).Foreground(adaptiveBlue),
+		stepNameStyle:    lipgloss.NewStyle().Bold(true).Foreground(adaptiveWhite),
+		successStyle:     lipgloss.NewStyle().Bold(true).Foreground(adaptiveGreen),
+		errorStyle:       lipgloss.NewStyle().Bold(true).Foreground(adaptiveRed),
+		warningStyle:     lipgloss.NewStyle().Foreground(adaptiveYellow),
+		infoStyle:        lipgloss.NewStyle().Foreground(adaptiveCyan),
+		dimStyle:         lipgloss.NewStyle().Foreground(adaptiveGray),
+		labelStyle:       lipgloss.NewStyle().Foreground(adaptiveGray),
+		valueStyle:       lipgloss.NewStyle().Foreground(adaptiveWhite),
+		commandStyle:     lipgloss.NewStyle().Foreground(adaptiveGray).Italic(true),
+		outputKeyStyle:   lipgloss.NewStyle().Foreground(adaptiveCyan),
+		outputValueStyle: lipgloss.NewStyle().Foreground(adaptiveWhite),
+		jobBoxStyle: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(adaptiveCyan).
+			Padding(1, 1),
+		outputsBoxStyle: lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), true, false).
+			BorderForeground(adaptiveGray).
+			Padding(0, 2),
+		completionSuccessStyle: lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), true, false).
+			BorderForeground(adaptiveGreen).
+			Padding(0, 2),
+		completionErrorStyle: lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), true, false).
+			BorderForeground(adaptiveRed).
+			Padding(0, 2),
+	}
+}
+
+func (s *Styles) render(sty lipgloss.Style, text string) string {
 	if !s.enabled {
 		return text
 	}
-	return style + text + reset
+	return sty.Render(text)
 }
 
-func (s *Styles) Header(text string) string      { return s.style(bold+brightWhite, text) }
-func (s *Styles) JobHeader(text string) string    { return s.style(bold+brightCyan, text) }
-func (s *Styles) StepHeader(text string) string  { return s.style(bold+blue, text) }
-func (s *Styles) StepName(text string) string    { return s.style(bold+white, text) }
-func (s *Styles) Success(text string) string     { return s.style(bold+green, text) }
-func (s *Styles) Error(text string) string       { return s.style(bold+red, text) }
-func (s *Styles) Warning(text string) string     { return s.style(yellow, text) }
-func (s *Styles) Info(text string) string        { return s.style(cyan, text) }
-func (s *Styles) Dim(text string) string         { return s.style(dim, text) }
-func (s *Styles) Label(text string) string       { return s.style(dim, text) }
-func (s *Styles) Value(text string) string       { return s.style(white, text) }
-func (s *Styles) Command(text string) string     { return s.style(dim+italic, text) }
-func (s *Styles) OutputKey(text string) string   { return s.style(cyan, text) }
-func (s *Styles) OutputValue(text string) string { return s.style(white, text) }
+func (s *Styles) Header(text string) string      { return s.render(s.headerStyle, text) }
+func (s *Styles) JobHeader(text string) string   { return s.render(s.jobHeaderStyle, text) }
+func (s *Styles) StepHeader(text string) string  { return s.render(s.stepHeaderStyle, text) }
+func (s *Styles) StepName(text string) string    { return s.render(s.stepNameStyle, text) }
+func (s *Styles) Success(text string) string     { return s.render(s.successStyle, text) }
+func (s *Styles) Error(text string) string       { return s.render(s.errorStyle, text) }
+func (s *Styles) Warning(text string) string     { return s.render(s.warningStyle, text) }
+func (s *Styles) Info(text string) string        { return s.render(s.infoStyle, text) }
+func (s *Styles) Dim(text string) string         { return s.render(s.dimStyle, text) }
+func (s *Styles) Label(text string) string       { return s.render(s.labelStyle, text) }
+func (s *Styles) Value(text string) string       { return s.render(s.valueStyle, text) }
+func (s *Styles) Command(text string) string     { return s.render(s.commandStyle, text) }
+func (s *Styles) OutputKey(text string) string   { return s.render(s.outputKeyStyle, text) }
+func (s *Styles) OutputValue(text string) string { return s.render(s.outputValueStyle, text) }
 
 func (s *Styles) StatusIcon(success bool) string {
 	if !s.enabled {
@@ -117,16 +143,16 @@ func (s *Styles) StatusIcon(success bool) string {
 		return "[FAIL]"
 	}
 	if success {
-		return s.style(green, "✓")
+		return s.successStyle.Render("✓")
 	}
-	return s.style(red, "✗")
+	return s.errorStyle.Render("✗")
 }
 
 func (s *Styles) Divider(width int) string {
 	if width <= 0 {
 		width = 60
 	}
-	return s.Dim(strings.Repeat("─", width))
+	return s.render(s.dimStyle, strings.Repeat("─", width))
 }
 
 func (s *Styles) StepBox(name, stepType string, extra map[string]string) string {
@@ -156,24 +182,18 @@ func (s *Styles) StepComplete(name string, success bool) string {
 
 func (s *Styles) JobBox(jobName, dir string, loadedFiles []string) string {
 	var sb strings.Builder
-	sb.WriteString("\n")
-	sb.WriteString(s.Divider(60))
-	sb.WriteString("\n")
-	sb.WriteString(s.JobHeader("  " + jobName))
-	sb.WriteString("\n")
+	sb.WriteString(s.JobHeader(jobName))
 	if dir != "" {
-		sb.WriteString(s.Dim("  Directory: "))
-		sb.WriteString(s.Value(dir))
 		sb.WriteString("\n")
+		sb.WriteString(s.Dim("Directory: "))
+		sb.WriteString(s.Value(dir))
 	}
 	for _, f := range loadedFiles {
-		sb.WriteString(s.Dim("  Loaded: "))
-		sb.WriteString(s.Value(f))
 		sb.WriteString("\n")
+		sb.WriteString(s.Dim("Loaded: "))
+		sb.WriteString(s.Value(f))
 	}
-	sb.WriteString(s.Divider(60))
-	sb.WriteString("\n")
-	return sb.String()
+	return "\n" + s.jobBoxStyle.Render(sb.String()) + "\n"
 }
 
 func (s *Styles) OutputsBox(title string, outputs map[string]string) string {
@@ -187,21 +207,20 @@ func (s *Styles) OutputsBox(title string, outputs map[string]string) string {
 		}
 	}
 	var sb strings.Builder
+	sb.WriteString(s.Header(title))
 	sb.WriteString("\n")
-	sb.WriteString(s.Header("  " + title))
-	sb.WriteString("\n")
-	sb.WriteString(s.Divider(40))
-	sb.WriteString("\n")
+	first := true
 	for key, value := range outputs {
-		sb.WriteString("  ")
+		if first {
+			first = false
+		} else {
+			sb.WriteString("\n")
+		}
 		sb.WriteString(s.OutputKey(key))
 		sb.WriteString(s.Dim(":" + strings.Repeat(" ", maxLen-len(key)+1)))
 		sb.WriteString(s.OutputValue(value))
-		sb.WriteString("\n")
 	}
-	sb.WriteString(s.Divider(40))
-	sb.WriteString("\n")
-	return sb.String()
+	return "\n" + s.outputsBoxStyle.Render(sb.String()) + "\n"
 }
 
 func (s *Styles) SectionHeader(text string) string {
@@ -213,28 +232,24 @@ func (s *Styles) Duration(d string) string {
 }
 
 func (s *Styles) CompletionBanner(name, duration string, success bool) string {
-	var sb strings.Builder
-	sb.WriteString("\n")
-	sb.WriteString(s.Divider(60))
-	sb.WriteString("\n")
+	var text string
 	if success {
-		sb.WriteString(s.Success("  ✓ " + name + " completed successfully"))
+		text = s.Success("✓ " + name + " completed successfully")
 	} else {
-		sb.WriteString(s.Error("  ✗ " + name + " failed"))
+		text = s.Error("✗ " + name + " failed")
 	}
-	sb.WriteString(" ")
-	sb.WriteString(s.Duration(duration))
-	sb.WriteString("\n")
-	sb.WriteString(s.Divider(60))
-	sb.WriteString("\n")
-	return sb.String()
+	text += " " + s.Duration(duration)
+	if success {
+		return "\n" + s.completionSuccessStyle.Render(text) + "\n"
+	}
+	return "\n" + s.completionErrorStyle.Render(text) + "\n"
 }
 
 // ── Printer: pretty output OR NDJSON protocol ───────────────
 
 // Printer provides either:
-//   • Pretty ANSI output to stdout (default)
-//   • NDJSON event stream to stdout (when jsonMode is true)
+//   - Pretty ANSI output to stdout (default)
+//   - NDJSON event stream to stdout (when jsonMode is true)
 //
 // The NDJSON mode is a stable machine protocol for third-party tools.
 // Every pretty-printed concept has a corresponding JSON event.
@@ -428,7 +443,7 @@ func (p *Printer) PrintCompletionBanner(name string, duration time.Duration, suc
 	p.writePretty(p.styles.CompletionBanner(name, duration.Round(time.Millisecond).String(), success))
 }
 
-// PrintSectionHeader prints a group header.
+// PrintSectionHeader prints a group header (e.g. ">>> Running 4 steps in sequence").
 func (p *Printer) PrintSectionHeader(text string) {
 	if p.jsonMode {
 		p.emitJSON(EventGroupHeader, map[string]any{"text": text})
