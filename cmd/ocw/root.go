@@ -1,15 +1,27 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
-	"sort"
 	"strings"
+	"time"
 
 	flow "github.com/Azure/go-workflow"
+	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 	"github.com/uncloud-cc/ocw/pkg/ocw"
 	"github.com/uncloud-cc/ocw/pkg/schema"
+)
+
+var (
+	envFiles    []string
+	inputsFile  string
+	outputsFile string
+	verbose     bool
+	jsonMode    bool
+	showSecrets bool
 )
 
 var rootCmd = &cobra.Command{
@@ -53,40 +65,79 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("resolve workflow directory: %w", err)
 		}
-		exec, err := ocw.NewDockerRuntime(parsed.Volumes, workflowDir)
+
+		// Auto-load .env from workflow directory and CWD (non-overriding)
+		loadedSet := make(map[string]struct{})
+		var loadedFiles []string
+		for _, dotenvPath := range []string{
+			filepath.Join(workflowDir, ".env"),
+			".env",
+		} {
+			if _, err := os.Stat(dotenvPath); err == nil {
+				_ = godotenv.Overload(dotenvPath)
+				absPath, _ := filepath.Abs(dotenvPath)
+				if _, ok := loadedSet[absPath]; !ok {
+					loadedSet[absPath] = struct{}{}
+					loadedFiles = append(loadedFiles, dotenvPath)
+				}
+			}
+		}
+
+		// Load explicit --env-file(s) (overriding)
+		for _, ef := range envFiles {
+			if err := godotenv.Overload(ef); err != nil {
+				return fmt.Errorf("load env file %q: %w", ef, err)
+			}
+			absPath, _ := filepath.Abs(ef)
+			if _, ok := loadedSet[absPath]; !ok {
+				loadedSet[absPath] = struct{}{}
+				loadedFiles = append(loadedFiles, ef)
+			}
+		}
+
+		state, err := ocw.NewState(&parsed.Inputs, inputsFile)
+		if err != nil {
+			return fmt.Errorf("inputs: %w", err)
+		}
+		state.Meta["name"] = parsed.Name
+		state.Steps = make(map[string]map[string]string)
+
+		if inputsFile != "" {
+			loadedFiles = append(loadedFiles, inputsFile)
+		}
+
+		// Collect secret values for masking
+		var secretValues []string
+		for _, v := range state.Secrets {
+			secretValues = append(secretValues, v)
+		}
+		jsonMode = jsonMode || verbose
+		printer := ocw.NewPrinter(jsonMode, showSecrets, secretValues)
+
+		exec, err := ocw.NewDockerRuntime(parsed.Volumes, workflowDir, printer)
 		if err != nil {
 			return fmt.Errorf("runtime: %w", err)
 		}
 		defer exec.Close()
 
-		inputsMap := make(map[string]string, len(parsed.Inputs))
-		secretsMap := make(map[string]string, len(parsed.Inputs))
-		for k, v := range parsed.Inputs {
-			if v.IsSecret {
-				secretsMap[k] = v.Value
-			} else {
-				inputsMap[k] = v.Value
-			}
-		}
-
-		state := &ocw.State{
-			Meta:    map[string]string{"name": parsed.Name, "id": parsed.ID},
-			Inputs:  inputsMap,
-			Secrets: secretsMap,
-			Steps:   make(map[string]map[string]string),
-		}
-
 		var workflow *flow.Workflow
 		var job *schema.Job
+		displayName := parsed.Name
 		if jobName != "" {
 			job = ocw.GetJob(parsed, jobName)
 			if job == nil {
 				return fmt.Errorf("job %q not found in %s", jobName, filePath)
 			}
-			workflow, err = ocw.CompileJob(job, exec, state)
+			state.Meta["job"] = jobName
+			if job.Name != "" {
+				displayName = job.Name
+			} else {
+				displayName = jobName
+			}
+			workflow, err = ocw.CompileJob(job, exec, state, printer)
 		} else {
 			if ocw.HasDirectFlow(parsed) {
-				workflow, err = ocw.CompileOCW(parsed, exec, state)
+				workflow, err = ocw.CompileOCW(parsed, exec, state, printer)
 			} else if ocw.HasJobs(parsed) {
 				return listJobsInFile(filePath, parsed)
 			} else {
@@ -97,9 +148,15 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("compile: %w", err)
 		}
 
-		if err := workflow.Do(cmd.Context()); err != nil {
-			return fmt.Errorf("run: %w", err)
-		}
+		printer.Info("workflow_start", map[string]any{
+			"name": displayName,
+			"file": filePath,
+			"job":  jobName,
+		})
+		printer.PrintJobStart(displayName, workflowDir, loadedFiles)
+		start := time.Now()
+		runErr := workflow.Do(cmd.Context())
+		duration := time.Since(start)
 
 		// Determine which raw outputs to resolve
 		var rawOutputs map[string]string
@@ -109,37 +166,56 @@ var rootCmd = &cobra.Command{
 			rawOutputs = parsed.Outputs
 		}
 
-		// Resolve and print
-		if len(rawOutputs) > 0 {
+		printer.PrintCompletionBanner(displayName, duration, runErr == nil)
+
+		// Resolve and print outputs (only on success)
+		if runErr == nil && len(rawOutputs) > 0 {
 			resolved, err := ocw.ResolveOutputs(rawOutputs, state)
 			if err != nil {
 				return fmt.Errorf("resolve outputs: %w", err)
 			}
+			printer.PrintOutputs("Outputs", resolved)
 
-			// Find the longest key
-			maxLen := 0
-			for k := range resolved {
-				if len(k) > maxLen {
-					maxLen = len(k)
+			if outputsFile != "" {
+				data, err := json.MarshalIndent(resolved, "", "  ")
+				if err != nil {
+					return fmt.Errorf("marshal outputs: %w", err)
 				}
-			}
-
-			// Sort by key
-			keys := make([]string, 0, len(resolved))
-			for k := range resolved {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-
-			// Print with padding
-			fmt.Printf("\nOutputs:\n")
-			for _, k := range keys {
-				fmt.Printf("  %s:%*s%s\n", k, maxLen-len(k)+1, "", resolved[k])
+				if err := os.WriteFile(outputsFile, data, 0644); err != nil {
+					return fmt.Errorf("write outputs file: %w", err)
+				}
 			}
 		}
 
+		if runErr != nil {
+			printer.Error("workflow_complete", map[string]any{
+				"name":        displayName,
+				"duration_ms": duration.Milliseconds(),
+				"success":     false,
+				"error":       runErr.Error(),
+			})
+		} else {
+			printer.Info("workflow_complete", map[string]any{
+				"name":        displayName,
+				"duration_ms": duration.Milliseconds(),
+				"success":     true,
+			})
+		}
+
+		if runErr != nil {
+			return fmt.Errorf("run: %w", runErr)
+		}
 		return nil
 	},
+}
+
+func init() {
+	rootCmd.PersistentFlags().StringSliceVarP(&envFiles, "env-file", "e", nil, ".env file(s) to load")
+	rootCmd.PersistentFlags().StringVarP(&inputsFile, "inputs", "i", "", "JSON file with input overrides")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "debug", "v", false, "Emit NDJSON events to stdout (includes debug info)")
+	rootCmd.PersistentFlags().BoolVar(&jsonMode, "json", false, "Emit pure NDJSON protocol to stdout (machine-readable)")
+	rootCmd.PersistentFlags().BoolVar(&showSecrets, "show-secrets", false, "Show secret values in output")
+	rootCmd.PersistentFlags().StringVarP(&outputsFile, "outputs", "o", "", "Write resolved outputs to a JSON file")
 }
 
 func Execute() error {

@@ -1,11 +1,14 @@
 package ocw
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
 // State stores the state of the workflow
@@ -20,6 +23,65 @@ type State struct {
 	Steps map[string]map[string]string
 
 	mu sync.RWMutex
+}
+
+// NewState initializes a State from inputs, environment variables,
+// and an optional JSON input file. Resolved values are injected into the
+// process environment so {{ env.KEY }} templates work seamlessly.
+func NewState(inputConfig *schema.Inputs, inputFile string) (*State, error) {
+	state := &State{
+		Meta:    make(map[string]string),
+		Inputs:  make(map[string]string),
+		Secrets: make(map[string]string),
+		Steps:   make(map[string]map[string]string),
+	}
+
+	// No inputs declared → return empty state
+	if inputConfig == nil || len(*inputConfig) == 0 {
+		return state, nil
+	}
+
+	// Load optional JSON overrides
+	fileValues := make(map[string]string)
+	if inputFile != "" {
+		data, err := os.ReadFile(inputFile)
+		if err != nil {
+			return nil, fmt.Errorf("read input file %q: %w", inputFile, err)
+		}
+		if err := json.Unmarshal(data, &fileValues); err != nil {
+			return nil, fmt.Errorf("parse input file %q: %w", inputFile, err)
+		}
+	}
+
+	for key, decl := range *inputConfig {
+		var value string
+
+		// Precedence: JSON input file > env var > schema default
+		switch {
+		case fileValues[key] != "":
+			value = fileValues[key]
+		case os.Getenv(key) != "":
+			value = os.Getenv(key)
+		case decl.Value != "":
+			value = decl.Value
+		default:
+			return nil, fmt.Errorf(
+				"required input %q is not set (provide env var %q, add to input file, or set a default)",
+				key, key,
+			)
+		}
+
+		// Publish to process env so {{ env.KEY }} works with input defaults
+		os.Setenv(key, value)
+
+		if decl.IsSecret {
+			state.Secrets[key] = value
+		} else {
+			state.Inputs[key] = value
+		}
+	}
+
+	return state, nil
 }
 
 // templatePattern matches {{ ... }} expressions

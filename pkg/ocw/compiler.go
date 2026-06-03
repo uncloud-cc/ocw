@@ -4,39 +4,60 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	flow "github.com/Azure/go-workflow"
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
 // CompileJob turns an OCW job into a *flow.Workflow.
-func CompileJob(job *schema.Job, exec Runtime, state *State) (*flow.Workflow, error) {
+func CompileJob(job *schema.Job, exec Runtime, state *State, printer *Printer) (*flow.Workflow, error) {
 	w := new(flow.Workflow)
 	flowType := GetJobFlowType(job)
+	printer.Debug("compile_job", map[string]any{"flowType": flowType})
 	switch flowType {
 	case "sequence":
 		steps := GetJobSteps(job)
-		compiled, err := compileSteps(steps, exec, state)
+		compiled, err := compileSteps(steps, exec, state, printer, false)
 		if err != nil {
 			return nil, err
 		}
-		w.Add(flow.Pipe(compiled...))
+		as := flow.Pipe(compiled...)
+		var once sync.Once
+		as.BeforeStep(func(ctx context.Context, step flow.Steper) (context.Context, error) {
+			once.Do(func() {
+				names := stepNames(compiled)
+				printer.PrintSectionHeader(fmt.Sprintf("Running %d steps in sequence: %s", len(names), strings.Join(names, ", ")))
+			})
+			return ctx, nil
+		})
+		w.Add(as)
 	case "parallel":
 		steps := GetJobSteps(job)
-		compiled, err := compileSteps(steps, exec, state)
+		compiled, err := compileSteps(steps, exec, state, printer, true)
 		if err != nil {
 			return nil, err
 		}
-		w.Add(flow.Steps(compiled...))
+		as := flow.Steps(compiled...)
+		var once sync.Once
+		as.BeforeStep(func(ctx context.Context, step flow.Steper) (context.Context, error) {
+			once.Do(func() {
+				names := stepNames(compiled)
+				printer.PrintSectionHeader(fmt.Sprintf("Running %d steps in parallel: %s", len(names), strings.Join(names, ", ")))
+			})
+			return ctx, nil
+		})
+		w.Add(as)
 	case "step":
 		steps := GetJobSteps(job)
-		s, err := compileStep(steps[0], exec, state)
+		s, err := compileStep(steps[0], exec, state, printer, false)
 		if err != nil {
 			return nil, err
 		}
 		w.Add(flow.Step(s))
 	case "switch":
-		swStep, err := compileJobSwitch(job, exec, state)
+		swStep, err := compileJobSwitch(job, exec, state, printer)
 		if err != nil {
 			return nil, err
 		}
@@ -48,26 +69,45 @@ func CompileJob(job *schema.Job, exec Runtime, state *State) (*flow.Workflow, er
 }
 
 // CompileOCW compiles an OCW schema's top-level flow into a workflow.
-func CompileOCW(ocw *schema.OCW, exec Runtime, state *State) (*flow.Workflow, error) {
+func CompileOCW(ocw *schema.OCW, exec Runtime, state *State, printer *Printer) (*flow.Workflow, error) {
 	w := new(flow.Workflow)
 	flowType := GetFlowType(ocw)
+	printer.Debug("compile_ocw", map[string]any{"flowType": flowType})
 	switch flowType {
 	case "sequence":
 		steps := GetSteps(ocw)
-		compiled, err := compileSteps(steps, exec, state)
+		compiled, err := compileSteps(steps, exec, state, printer, false)
 		if err != nil {
 			return nil, err
 		}
-		w.Add(flow.Pipe(compiled...))
+		as := flow.Pipe(compiled...)
+		var once sync.Once
+		as.BeforeStep(func(ctx context.Context, step flow.Steper) (context.Context, error) {
+			once.Do(func() {
+				names := stepNames(compiled)
+				printer.PrintSectionHeader(fmt.Sprintf("Running %d steps in sequence: %s", len(names), strings.Join(names, ", ")))
+			})
+			return ctx, nil
+		})
+		w.Add(as)
 	case "parallel":
 		steps := GetSteps(ocw)
-		compiled, err := compileSteps(steps, exec, state)
+		compiled, err := compileSteps(steps, exec, state, printer, true)
 		if err != nil {
 			return nil, err
 		}
-		w.Add(flow.Steps(compiled...))
+		as := flow.Steps(compiled...)
+		var once sync.Once
+		as.BeforeStep(func(ctx context.Context, step flow.Steper) (context.Context, error) {
+			once.Do(func() {
+				names := stepNames(compiled)
+				printer.PrintSectionHeader(fmt.Sprintf("Running %d steps in parallel: %s", len(names), strings.Join(names, ", ")))
+			})
+			return ctx, nil
+		})
+		w.Add(as)
 	case "switch":
-		swStep, err := compileOCWSwitch(ocw, exec, state)
+		swStep, err := compileOCWSwitch(ocw, exec, state, printer)
 		if err != nil {
 			return nil, err
 		}
@@ -80,13 +120,34 @@ func CompileOCW(ocw *schema.OCW, exec Runtime, state *State) (*flow.Workflow, er
 
 // ocwStep adapts an OCW leaf step into a go-workflow Steper.
 type ocwStep struct {
-	name string
-	do   func(ctx context.Context) error
+	name    string
+	stepType string
+	do      func(ctx context.Context) error
+	printer *Printer
 }
 
 func (s *ocwStep) String() string { return s.name }
 func (s *ocwStep) Do(ctx context.Context) error {
-	return s.do(ctx)
+	extras := map[string]string{}
+	if s.stepType != "" {
+		// extras can be filled by compile functions if needed
+	}
+	s.printer.PrintStepStart(s.name, s.stepType, extras)
+	s.printer.Debug("step_start", map[string]any{"name": s.name, "type": s.stepType})
+
+	start := time.Now()
+	err := s.do(ctx)
+	duration := time.Since(start)
+
+	success := err == nil
+	s.printer.PrintStepComplete(s.name, success)
+	s.printer.Info("step_complete", map[string]any{
+		"name":        s.name,
+		"success":     success,
+		"duration_ms": duration.Milliseconds(),
+	})
+
+	return err
 }
 
 // evalStep evaluates an expression and stores the result for switch branching.
@@ -123,6 +184,8 @@ type switchStep struct {
 	state    *State
 }
 
+func (s *switchStep) String() string { return "switch" }
+
 func (s *switchStep) BuildStep() {
 	eval := &evalStep{expr: s.evalExpr, state: s.state}
 	sw := flow.Switch(eval)
@@ -140,27 +203,68 @@ func (s *switchStep) BuildStep() {
 // parallelStep runs nested steps in parallel.
 type parallelStep struct {
 	flow.SubWorkflow
-	steps []flow.Steper
+	steps   []flow.Steper
+	printer *Printer
+	names   []string
+}
+
+func (p *parallelStep) String() string {
+	return fmt.Sprintf("parallel(%d)", len(p.steps))
 }
 
 func (p *parallelStep) BuildStep() {
-	p.Add(flow.Steps(p.steps...))
+	as := flow.Steps(p.steps...)
+	var once sync.Once
+	as.BeforeStep(func(ctx context.Context, step flow.Steper) (context.Context, error) {
+		once.Do(func() {
+			p.printer.PrintSectionHeader(fmt.Sprintf("Running %d steps in parallel: %s", len(p.names), strings.Join(p.names, ", ")))
+		})
+		return ctx, nil
+	})
+	p.Add(as)
 }
 
 // sequenceStep runs nested steps in sequence.
 type sequenceStep struct {
 	flow.SubWorkflow
-	steps []flow.Steper
+	steps   []flow.Steper
+	printer *Printer
+	names   []string
+}
+
+func (s *sequenceStep) String() string {
+	return fmt.Sprintf("sequence(%d)", len(s.steps))
 }
 
 func (s *sequenceStep) BuildStep() {
-	s.Add(flow.Pipe(s.steps...))
+	as := flow.Pipe(s.steps...)
+	var once sync.Once
+	as.BeforeStep(func(ctx context.Context, step flow.Steper) (context.Context, error) {
+		once.Do(func() {
+			s.printer.PrintSectionHeader(fmt.Sprintf("Running %d steps in sequence: %s", len(s.names), strings.Join(s.names, ", ")))
+		})
+		return ctx, nil
+	})
+	s.Add(as)
 }
 
-func compileSteps(steps []schema.Step, exec Runtime, state *State) ([]flow.Steper, error) {
+// stepNames extracts human-readable names from a slice of compiled steps.
+func stepNames(steps []flow.Steper) []string {
+	names := make([]string, len(steps))
+	for i, s := range steps {
+		if str, ok := s.(fmt.Stringer); ok {
+			names[i] = str.String()
+		} else {
+			names[i] = fmt.Sprintf("step-%d", i+1)
+		}
+	}
+	return names
+}
+
+func compileSteps(steps []schema.Step, exec Runtime, state *State, printer *Printer, usePrefix bool) ([]flow.Steper, error) {
 	var out []flow.Steper
 	for _, s := range steps {
-		compiled, err := compileStep(s, exec, state)
+		compiled, err := compileStep(s, exec, state, printer, usePrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -169,37 +273,49 @@ func compileSteps(steps []schema.Step, exec Runtime, state *State) ([]flow.Stepe
 	return out, nil
 }
 
-func compileStep(s schema.Step, exec Runtime, state *State) (flow.Steper, error) {
+func compileStep(s schema.Step, exec Runtime, state *State, printer *Printer, usePrefix bool) (flow.Steper, error) {
 	switch {
 	case s.RunStep != nil:
-		return compileRunStep(s.RunStep, exec, state)
+		return compileRunStep(s.RunStep, exec, state, printer, usePrefix)
 	case s.BuildStep != nil:
-		return compileBuildStep(s.BuildStep, exec, state)
+		return compileBuildStep(s.BuildStep, exec, state, printer, usePrefix)
 	case s.ParallelStep != nil:
-		return compileParallelStep(s.ParallelStep, exec, state)
+		return compileParallelStep(s.ParallelStep, exec, state, printer)
 	case s.SequenceStep != nil:
-		return compileSequenceStep(s.SequenceStep, exec, state)
+		return compileSequenceStep(s.SequenceStep, exec, state, printer)
 	case s.SwitchStep != nil:
-		return compileSwitchStep(s.SwitchStep, exec, state)
+		return compileSwitchStep(s.SwitchStep, exec, state, printer)
 	default:
 		return nil, fmt.Errorf("unsupported step type")
 	}
 }
 
-func compileRunStep(s *schema.RunStep, exec Runtime, state *State) (flow.Steper, error) {
+func compileRunStep(s *schema.RunStep, exec Runtime, state *State, printer *Printer, usePrefix bool) (flow.Steper, error) {
 	name := s.Name
 	if name == "" {
 		name = s.Image
 	}
+	prefix := ""
+	if usePrefix {
+		if s.ID != "" {
+			prefix = string(s.ID)
+		} else if s.Name != "" {
+			prefix = s.Name
+		} else {
+			prefix = s.Image
+		}
+	}
 	return &ocwStep{
-		name: name,
+		name:     name,
+		stepType: "run",
+		printer:  printer,
 		do: func(ctx context.Context) error {
 			interpolatedSchema, err := interpolateRunStepTemplates(s, state)
 			if err != nil {
 				return fmt.Errorf("Error while interpolating template value for step %s: %v", name, err)
 			}
 
-			outputs, err := exec.Run(ctx, interpolatedSchema)
+			outputs, err := exec.Run(ctx, interpolatedSchema, prefix)
 			if err != nil {
 				return fmt.Errorf("Error while running container %s: %v", name, err)
 			}
@@ -638,22 +754,32 @@ func interpolateBuildStepTemplates(s *schema.BuildStep, state *State) (*schema.B
 	}, nil
 }
 
-func compileBuildStep(s *schema.BuildStep, exec Runtime, state *State) (flow.Steper, error) {
+func compileBuildStep(s *schema.BuildStep, exec Runtime, state *State, printer *Printer, usePrefix bool) (flow.Steper, error) {
 	name := s.Name
 	if name == "" {
 		name = s.Build.Image
 	}
+	prefix := ""
+	if usePrefix {
+		if s.ID != "" {
+			prefix = string(s.ID)
+		} else if s.Name != "" {
+			prefix = s.Name
+		} else {
+			prefix = s.Build.Image
+		}
+	}
 	return &ocwStep{
-		name: name,
+		name:     name,
+		stepType: "build",
+		printer:  printer,
 		do: func(ctx context.Context) error {
-			fmt.Printf("\nTriggering build step with step state: %v\n\n", s)
-
 			interpolatedSchema, err := interpolateBuildStepTemplates(s, state)
 			if err != nil {
 				return fmt.Errorf("Error while interpolating template value for step %s: %v", name, err)
 			}
 
-			outputs, err := exec.Build(ctx, interpolatedSchema)
+			outputs, err := exec.Build(ctx, interpolatedSchema, prefix)
 			if err != nil {
 				return fmt.Errorf("Error while trying to run build step %s: %v", name, err)
 			}
@@ -666,26 +792,34 @@ func compileBuildStep(s *schema.BuildStep, exec Runtime, state *State) (flow.Ste
 	}, nil
 }
 
-func compileParallelStep(s *schema.ParallelStep, exec Runtime, state *State) (flow.Steper, error) {
-	compiled, err := compileSteps(s.Parallel, exec, state)
+func compileParallelStep(s *schema.ParallelStep, exec Runtime, state *State, printer *Printer) (flow.Steper, error) {
+	compiled, err := compileSteps(s.Parallel, exec, state, printer, true)
 	if err != nil {
 		return nil, err
 	}
-	return &parallelStep{steps: compiled}, nil
+	return &parallelStep{
+		steps:   compiled,
+		printer: printer,
+		names:   stepNames(compiled),
+	}, nil
 }
 
-func compileSequenceStep(s *schema.SequenceStep, exec Runtime, state *State) (flow.Steper, error) {
-	compiled, err := compileSteps(s.Sequence, exec, state)
+func compileSequenceStep(s *schema.SequenceStep, exec Runtime, state *State, printer *Printer) (flow.Steper, error) {
+	compiled, err := compileSteps(s.Sequence, exec, state, printer, false)
 	if err != nil {
 		return nil, err
 	}
-	return &sequenceStep{steps: compiled}, nil
+	return &sequenceStep{
+		steps:   compiled,
+		printer: printer,
+		names:   stepNames(compiled),
+	}, nil
 }
 
-func compileSwitchStep(s *schema.SwitchStep, exec Runtime, state *State) (flow.Steper, error) {
+func compileSwitchStep(s *schema.SwitchStep, exec Runtime, state *State, printer *Printer) (flow.Steper, error) {
 	cases := make(map[string]flow.Steper)
 	for caseValue, caseStepSchema := range s.Case {
-		compiled, err := compileStep(caseStepSchema, exec, state)
+		compiled, err := compileStep(caseStepSchema, exec, state, printer, false)
 		if err != nil {
 			return nil, err
 		}
@@ -694,7 +828,7 @@ func compileSwitchStep(s *schema.SwitchStep, exec Runtime, state *State) (flow.S
 
 	var def flow.Steper
 	if s.Default != nil {
-		compiled, err := compileStep(*s.Default, exec, state)
+		compiled, err := compileStep(*s.Default, exec, state, printer, false)
 		if err != nil {
 			return nil, err
 		}
@@ -709,13 +843,13 @@ func compileSwitchStep(s *schema.SwitchStep, exec Runtime, state *State) (flow.S
 	}, nil
 }
 
-func compileJobSwitch(job *schema.Job, exec Runtime, state *State) (flow.Steper, error) {
+func compileJobSwitch(job *schema.Job, exec Runtime, state *State, printer *Printer) (flow.Steper, error) {
 	if job.Switch == nil {
 		return nil, fmt.Errorf("switch expression is nil")
 	}
 	cases := make(map[string]flow.Steper)
 	for caseValue, caseStepSchema := range job.Case {
-		compiled, err := compileStep(caseStepSchema, exec, state)
+		compiled, err := compileStep(caseStepSchema, exec, state, printer, false)
 		if err != nil {
 			return nil, err
 		}
@@ -724,7 +858,7 @@ func compileJobSwitch(job *schema.Job, exec Runtime, state *State) (flow.Steper,
 
 	var def flow.Steper
 	if job.Default != nil {
-		compiled, err := compileStep(*job.Default, exec, state)
+		compiled, err := compileStep(*job.Default, exec, state, printer, false)
 		if err != nil {
 			return nil, err
 		}
@@ -739,13 +873,13 @@ func compileJobSwitch(job *schema.Job, exec Runtime, state *State) (flow.Steper,
 	}, nil
 }
 
-func compileOCWSwitch(ocw *schema.OCW, exec Runtime, state *State) (flow.Steper, error) {
+func compileOCWSwitch(ocw *schema.OCW, exec Runtime, state *State, printer *Printer) (flow.Steper, error) {
 	if ocw.Switch == nil {
 		return nil, fmt.Errorf("switch expression is nil")
 	}
 	cases := make(map[string]flow.Steper)
 	for caseValue, caseStepSchema := range ocw.Case {
-		compiled, err := compileStep(caseStepSchema, exec, state)
+		compiled, err := compileStep(caseStepSchema, exec, state, printer, false)
 		if err != nil {
 			return nil, err
 		}
@@ -754,7 +888,7 @@ func compileOCWSwitch(ocw *schema.OCW, exec Runtime, state *State) (flow.Steper,
 
 	var def flow.Steper
 	if ocw.Default != nil {
-		compiled, err := compileStep(*ocw.Default, exec, state)
+		compiled, err := compileStep(*ocw.Default, exec, state, printer, false)
 		if err != nil {
 			return nil, err
 		}

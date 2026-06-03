@@ -4,10 +4,10 @@
 Comprehensive rewrite of the first version of ocw.
 
 ## TODOs
-- [ ] Implement basic ability to run and build containers
-- [ ] Implement build step outputs
-- [ ] Implement run step outputs
-- [ ] Implement `/workflow` mount
+- [x] Implement basic ability to run and build containers
+- [x] Implement build step outputs
+- [x] Implement run step outputs
+- [x] Implement `/workflow` mount
 - [ ] Implement volume mounts
 - [ ] Implement service (background) containers
 - [ ] Implement imported workflows

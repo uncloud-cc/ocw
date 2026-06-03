@@ -11,27 +11,75 @@ import (
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
+// linePrefixWriter buffers writes and emits each complete line through the printer.
+// In pretty mode it formats with prefix + colored separator.
+// In JSON mode it emits container.output events.
+type linePrefixWriter struct {
+	printer *Printer
+	prefix  string // step name/ID
+	stream  string // "stdout" or "stderr"
+	buf     []byte
+}
+
+func (w *linePrefixWriter) emit(line string) {
+	w.printer.PrintContainerOutput(w.prefix, w.stream, line)
+}
+
+func (w *linePrefixWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		idx := 0
+		for i, b := range w.buf {
+			if b == '\n' {
+				idx = i + 1
+				break
+			}
+		}
+		if idx == 0 {
+			break
+		}
+		line := string(w.buf[:idx-1]) // exclude the newline
+		w.emit(line)
+		w.buf = w.buf[idx:]
+	}
+	return len(p), nil
+}
+
+func (w *linePrefixWriter) Flush() {
+	if len(w.buf) > 0 {
+		w.emit(string(w.buf))
+		w.buf = nil
+	}
+}
+
 type DockerRuntime struct {
 	volumes     schema.Volumes
 	workflowDir string
+	printer     *Printer
 }
 
-func NewDockerRuntime(volumes schema.Volumes, workflowDir string) (*DockerRuntime, error) {
+func NewDockerRuntime(volumes schema.Volumes, workflowDir string, printer *Printer) (*DockerRuntime, error) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return nil, fmt.Errorf("docker CLI not found in PATH")
 	}
 	if err := exec.Command("docker", "version").Run(); err != nil {
 		return nil, fmt.Errorf("docker daemon unreachable: %w", err)
 	}
-	return &DockerRuntime{volumes: volumes, workflowDir: workflowDir}, nil
+	return &DockerRuntime{volumes: volumes, workflowDir: workflowDir, printer: printer}, nil
 }
 
 func (d *DockerRuntime) Close() error { return nil }
 
-func (d *DockerRuntime) Run(ctx context.Context, step *schema.RunStep) (map[string]string, error) {
+func (d *DockerRuntime) Run(ctx context.Context, step *schema.RunStep, prefix string) (map[string]string, error) {
 	if step.Background {
 		return nil, fmt.Errorf("background containers are not yet supported")
 	}
+
+	d.printer.Debug("docker_run_start", map[string]any{
+		"image":  step.Image,
+		"cmd":    step.Cmd,
+		"prefix": prefix,
+	})
 
 	outputsFile, err := createTempOutputsFile()
 	if err != nil {
@@ -39,13 +87,31 @@ func (d *DockerRuntime) Run(ctx context.Context, step *schema.RunStep) (map[stri
 	}
 	defer os.Remove(outputsFile)
 
-	if err := d.execDocker(ctx, "run", d.buildRunArgs(step, outputsFile)...); err != nil {
+	if err := d.execDocker(ctx, "run", prefix, d.buildRunArgs(step, outputsFile)...); err != nil {
+		d.printer.Error("docker_run_failed", map[string]any{
+			"image": step.Image,
+			"error": err.Error(),
+		})
 		return nil, err
 	}
-	return parseOutputsFile(outputsFile)
+	outputs, err := parseOutputsFile(outputsFile)
+	if err != nil {
+		return nil, err
+	}
+	d.printer.Debug("docker_run_complete", map[string]any{
+		"image":   step.Image,
+		"outputs": len(outputs),
+	})
+	return outputs, nil
 }
 
-func (d *DockerRuntime) Build(ctx context.Context, step *schema.BuildStep) (map[string]string, error) {
+func (d *DockerRuntime) Build(ctx context.Context, step *schema.BuildStep, prefix string) (map[string]string, error) {
+	d.printer.Debug("docker_build_start", map[string]any{
+		"image":   step.Build.Image,
+		"context": step.Build.Context,
+		"prefix":  prefix,
+	})
+
 	// Create a temp file for docker to write the built image ID into.
 	tmpFile, err := os.CreateTemp("", "ocw-iid-*")
 	if err != nil {
@@ -62,7 +128,11 @@ func (d *DockerRuntime) Build(ctx context.Context, step *schema.BuildStep) (map[
 		args = append(args[:len(args)-1], "--iidfile", tmpPath, last)
 	}
 
-	if err := d.execDocker(ctx, "build", args...); err != nil {
+	if err := d.execDocker(ctx, "build", prefix, args...); err != nil {
+		d.printer.Error("docker_build_failed", map[string]any{
+			"image": step.Build.Image,
+			"error": err.Error(),
+		})
 		return nil, err
 	}
 
@@ -72,8 +142,14 @@ func (d *DockerRuntime) Build(ctx context.Context, step *schema.BuildStep) (map[
 		return nil, fmt.Errorf("read iidfile: %w", err)
 	}
 
+	imageID := strings.TrimSpace(string(imageIDBytes))
+	d.printer.Debug("docker_build_complete", map[string]any{
+		"image":   step.Build.Image,
+		"imageID": imageID,
+	})
+
 	return map[string]string{
-		"image":     strings.TrimSpace(string(imageIDBytes)),
+		"image":     imageID,
 		"imageName": step.Build.Image,
 	}, nil
 }
@@ -168,11 +244,21 @@ func (d *DockerRuntime) buildBuildArgs(step *schema.BuildStep) []string {
 	return args
 }
 
-func (d *DockerRuntime) execDocker(ctx context.Context, op string, args ...string) error {
+func (d *DockerRuntime) execDocker(ctx context.Context, op, prefix string, args ...string) error {
+	d.printer.Debug("docker_exec", map[string]any{
+		"op":   op,
+		"args": args,
+	})
 	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Stdout, cmd.Stderr, cmd.Dir = os.Stdout, os.Stderr, d.workflowDir
+	outWriter := &linePrefixWriter{printer: d.printer, prefix: prefix, stream: "stdout"}
+	errWriter := &linePrefixWriter{printer: d.printer, prefix: prefix, stream: "stderr"}
+	cmd.Stdout, cmd.Stderr, cmd.Dir = outWriter, errWriter, d.workflowDir
 	if err := cmd.Run(); err != nil {
+		outWriter.Flush()
+		errWriter.Flush()
 		return fmt.Errorf("docker %s failed: %w", op, err)
 	}
+	outWriter.Flush()
+	errWriter.Flush()
 	return nil
 }

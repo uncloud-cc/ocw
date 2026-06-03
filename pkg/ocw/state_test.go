@@ -2,8 +2,12 @@ package ocw
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
 func TestInterpolateTemplate(t *testing.T) {
@@ -367,6 +371,210 @@ func TestState_Clone(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewState(t *testing.T) {
+	t.Run("nil inputs returns empty state", func(t *testing.T) {
+		state, err := NewState(nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(state.Inputs) != 0 || len(state.Secrets) != 0 || len(state.Steps) != 0 {
+			t.Errorf("expected empty state, got Inputs=%v Secrets=%v Steps=%v", state.Inputs, state.Secrets, state.Steps)
+		}
+	})
+
+	t.Run("empty inputs map returns empty state", func(t *testing.T) {
+		empty := schema.Inputs{}
+		state, err := NewState(&empty, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(state.Inputs) != 0 || len(state.Secrets) != 0 {
+			t.Errorf("expected empty state, got Inputs=%v Secrets=%v", state.Inputs, state.Secrets)
+		}
+	})
+
+	t.Run("uses schema default when no env or file", func(t *testing.T) {
+		inputs := schema.Inputs{
+			"DB_PORT": {Value: "8080", IsSecret: false},
+			"DB_USER": {Value: "admin", IsSecret: false},
+		}
+		state, err := NewState(&inputs, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state.Inputs["DB_PORT"] != "8080" {
+			t.Errorf("expected DB_PORT=8080, got %q", state.Inputs["DB_PORT"])
+		}
+		if state.Inputs["DB_USER"] != "admin" {
+			t.Errorf("expected DB_USER=admin, got %q", state.Inputs["DB_USER"])
+		}
+		if os.Getenv("DB_PORT") != "8080" {
+			t.Errorf("expected env DB_PORT=8080, got %q", os.Getenv("DB_PORT"))
+		}
+	})
+
+	t.Run("env var overrides schema default", func(t *testing.T) {
+		inputs := schema.Inputs{
+			"DB_PORT": {Value: "8080", IsSecret: false},
+		}
+		t.Setenv("DB_PORT", "5432")
+		state, err := NewState(&inputs, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state.Inputs["DB_PORT"] != "5432" {
+			t.Errorf("expected DB_PORT=5432, got %q", state.Inputs["DB_PORT"])
+		}
+		if os.Getenv("DB_PORT") != "5432" {
+			t.Errorf("expected env DB_PORT=5432, got %q", os.Getenv("DB_PORT"))
+		}
+	})
+
+	t.Run("input file overrides env var", func(t *testing.T) {
+		inputs := schema.Inputs{
+			"DB_PORT": {Value: "8080", IsSecret: false},
+		}
+		t.Setenv("DB_PORT", "5432")
+
+		tmpDir := t.TempDir()
+		inputFile := filepath.Join(tmpDir, "inputs.json")
+		if err := os.WriteFile(inputFile, []byte(`{"DB_PORT":"3306"}`), 0644); err != nil {
+			t.Fatalf("write input file: %v", err)
+		}
+
+		state, err := NewState(&inputs, inputFile)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state.Inputs["DB_PORT"] != "3306" {
+			t.Errorf("expected DB_PORT=3306, got %q", state.Inputs["DB_PORT"])
+		}
+		if os.Getenv("DB_PORT") != "3306" {
+			t.Errorf("expected env DB_PORT=3306, got %q", os.Getenv("DB_PORT"))
+		}
+	})
+
+	t.Run("missing required input returns error", func(t *testing.T) {
+		inputs := schema.Inputs{
+			"API_KEY": {Value: "", IsSecret: true},
+		}
+		_, err := NewState(&inputs, "")
+		if err == nil {
+			t.Fatal("expected error for missing required input, got nil")
+		}
+		expected := `required input "API_KEY" is not set`
+		if !contains(err.Error(), expected) {
+			t.Errorf("expected error to contain %q, got %q", expected, err.Error())
+		}
+	})
+
+	t.Run("secrets go to Secrets map, plain inputs to Inputs map", func(t *testing.T) {
+		inputs := schema.Inputs{
+			"DB_PORT":     {Value: "8080", IsSecret: false},
+			"DB_PASSWORD": {Value: "secret123", IsSecret: true},
+		}
+		state, err := NewState(&inputs, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state.Inputs["DB_PORT"] != "8080" {
+			t.Errorf("expected Inputs[DB_PORT]=8080, got %q", state.Inputs["DB_PORT"])
+		}
+		if _, ok := state.Inputs["DB_PASSWORD"]; ok {
+			t.Error("expected DB_PASSWORD to NOT be in Inputs")
+		}
+		if state.Secrets["DB_PASSWORD"] != "secret123" {
+			t.Errorf("expected Secrets[DB_PASSWORD]=secret123, got %q", state.Secrets["DB_PASSWORD"])
+		}
+		if _, ok := state.Secrets["DB_PORT"]; ok {
+			t.Error("expected DB_PORT to NOT be in Secrets")
+		}
+	})
+
+	t.Run("sets os env for template interpolation", func(t *testing.T) {
+		inputs := schema.Inputs{
+			"APP_NAME": {Value: "myapp", IsSecret: false},
+		}
+		state, err := NewState(&inputs, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		result, err := state.InterpolateTemplate("{{ env.APP_NAME }}")
+		if err != nil {
+			t.Fatalf("template interpolation failed: %v", err)
+		}
+		if result != "myapp" {
+			t.Errorf("expected template result 'myapp', got %q", result)
+		}
+	})
+
+	t.Run("invalid JSON file returns error", func(t *testing.T) {
+		inputs := schema.Inputs{
+			"KEY": {Value: "default", IsSecret: false},
+		}
+		tmpDir := t.TempDir()
+		inputFile := filepath.Join(tmpDir, "inputs.json")
+		if err := os.WriteFile(inputFile, []byte(`not json`), 0644); err != nil {
+			t.Fatalf("write input file: %v", err)
+		}
+		_, err := NewState(&inputs, inputFile)
+		if err == nil {
+			t.Fatal("expected error for invalid JSON, got nil")
+		}
+		if !contains(err.Error(), "parse input file") {
+			t.Errorf("expected error about parsing input file, got %q", err.Error())
+		}
+	})
+
+	t.Run("missing JSON file returns error", func(t *testing.T) {
+		inputs := schema.Inputs{
+			"KEY": {Value: "default", IsSecret: false},
+		}
+		_, err := NewState(&inputs, "/nonexistent/path/inputs.json")
+		if err == nil {
+			t.Fatal("expected error for missing file, got nil")
+		}
+		if !contains(err.Error(), "read input file") {
+			t.Errorf("expected error about reading input file, got %q", err.Error())
+		}
+	})
+
+	t.Run("input file with multiple keys", func(t *testing.T) {
+		inputs := schema.Inputs{
+			"KEY1": {Value: "default1", IsSecret: false},
+			"KEY2": {Value: "default2", IsSecret: true},
+		}
+		tmpDir := t.TempDir()
+		inputFile := filepath.Join(tmpDir, "inputs.json")
+		if err := os.WriteFile(inputFile, []byte(`{"KEY1":"override1","KEY2":"override2"}`), 0644); err != nil {
+			t.Fatalf("write input file: %v", err)
+		}
+		state, err := NewState(&inputs, inputFile)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state.Inputs["KEY1"] != "override1" {
+			t.Errorf("expected KEY1=override1, got %q", state.Inputs["KEY1"])
+		}
+		if state.Secrets["KEY2"] != "override2" {
+			t.Errorf("expected KEY2=override2, got %q", state.Secrets["KEY2"])
+		}
+	})
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 func errorsEqual(a, b error) bool {
