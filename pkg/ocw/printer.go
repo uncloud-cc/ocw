@@ -13,22 +13,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// ── Event types for the NDJSON protocol ─────────────────────
-
-const (
-	EventWorkflowStart    = "workflow.start"
-	EventWorkflowComplete = "workflow.complete"
-	EventGroupHeader      = "group.header"
-	EventStepStart        = "step.start"
-	EventStepComplete     = "step.complete"
-	EventContainerOutput  = "container.output"
-	EventWorkflowOutputs  = "workflow.outputs"
-	EventLogDebug         = "log.debug"
-	EventLogInfo          = "log.info"
-	EventLogWarn          = "log.warn"
-	EventLogError         = "log.error"
-)
-
 // ── Styles (lipgloss-based) ──────────────────────────────────
 
 type Styles struct {

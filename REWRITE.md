@@ -23,6 +23,9 @@ Comprehensive rewrite of the first version of ocw.
 
 ## Notes
 - "env" doesn't make any sense for the workflow inputs since they shadow the real env vars that exist inside each container 👉🏻 Instead we'll do inputs which can be defined and can be defined as plain-text inputs available via `{{ input.<name> }}` or via `{{ secret.<name> }}`
+- The "printer" is a first UI for the NDJSON event-stream that comes out of the ocw CLI - the source of truth here is NDJSON (the pretty-printer is documentation for that event stream format + an example UI implementation) (extensibility of ocw for now is limited to custom UIs that can launch ocw as a child-process and then pretty-print the --json view) 👉🏻 BTW: The JSON output is a great way to e2e test ocw!
+- Down the line, the extensibility of ocw might be extended to be able to run request / response hooks and to be able to interact with a running instance of ocw directly through some sort of API that runs on the localhost 👉🏻 In that case it could also make sense though to introduce contexts whereby users can login their ocw instance into any service provider in the background
+  - **For now the extensibility is provided through the library layer of `ocw`** - Keep in mind that the entire core functionality of `ocw` is made available as a library. Like that I can use `ocw` to load & parse a file, then set custom data before I compile and run it 👉🏻 That way I can already control secrets handling etc.
 
 ---------
 - [x] Basic structure (cleanup schema, add parsing files to OCW)
