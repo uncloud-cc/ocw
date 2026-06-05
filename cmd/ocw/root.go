@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	flow "github.com/Azure/go-workflow"
@@ -21,6 +22,7 @@ var (
 	outputsFile string
 	verbose     bool
 	jsonMode    bool
+	debugMode   bool
 	showSecrets bool
 )
 
@@ -29,8 +31,37 @@ var rootCmd = &cobra.Command{
 	Short: "ocw is a container-native CI/CD workflow engine that actually runs locally",
 	Args:  cobra.RangeArgs(0, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		bus := ocw.NewEventBus()
+
+		// Attach the JSON logger and the pretty printer
+		var wg sync.WaitGroup
+
+		jsonCh := bus.Subscribe(64)
+		f, err := os.OpenFile("debug.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			return fmt.Errorf("Cannot open debug.log log file: %v", err)
+		}
+		defer f.Close()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l := ocw.NewJSONLogger(f)
+			l.Run(jsonCh)
+		}()
+
+		prettyCh := bus.Subscribe(64)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			p := ocw.NewPrettyPrinter(os.Stdout)
+			p.Run(prettyCh)
+		}()
+		bus.Debug("Initialized pretty-printer and JSON logger")
+
 		if len(args) == 0 {
-			return listAllJobs()
+			bus.Debug("No args detected, listing available jobs instead")
+			return listAllJobs(bus)
 		}
 
 		var filePath string
@@ -212,8 +243,8 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringSliceVarP(&envFiles, "env-file", "e", nil, ".env file(s) to load")
 	rootCmd.PersistentFlags().StringVarP(&inputsFile, "inputs", "i", "", "JSON file with input overrides")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "debug", "v", false, "Emit NDJSON events to stdout (includes debug info)")
 	rootCmd.PersistentFlags().BoolVar(&jsonMode, "json", false, "Emit pure NDJSON protocol to stdout (machine-readable)")
+	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging (automatically enables JSON logging)")
 	rootCmd.PersistentFlags().BoolVar(&showSecrets, "show-secrets", false, "Show secret values in output")
 	rootCmd.PersistentFlags().StringVarP(&outputsFile, "outputs", "o", "", "Write resolved outputs to a JSON file")
 }
@@ -222,12 +253,16 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-func listAllJobs() error {
+func listAllJobs(bus *ocw.EventBus) error {
+	bus.Debug("Starting listAllJobs()")
+
 	files := findWorkflowFiles()
 	if len(files) == 0 {
+		bus.Debug("No workflow files found in current directory")
 		return fmt.Errorf("no workflow files found in current directory")
 	}
 
+	bus.Debug(fmt.Sprintf("Found %d workflow files: %v", len(files), files))
 	type jobInfo struct {
 		file string
 		name string
@@ -238,26 +273,34 @@ func listAllJobs() error {
 	for _, file := range files {
 		schema, err := ocw.ParseFile(file)
 		if err != nil {
+			bus.Debug(fmt.Sprintf("[SKIPPING] Could not parse %s as ocw workflow file: %v", file, err))
 			continue
 		}
 		if !ocw.HasJobs(schema) && !ocw.HasDirectFlow(schema) {
+			bus.Debug(fmt.Sprintf("[SKIPPING] File does not contain any jobs or direct flow statements: %s", file))
 			continue
 		}
 		parsedFiles++
 		if ocw.HasJobs(schema) {
-			for _, name := range ocw.GetJobNames(schema) {
+			jobNames := ocw.GetJobNames(schema)
+			bus.Debug(fmt.Sprintf("Found jobs in file %s: %v", file, jobNames))
+
+			for _, name := range jobNames {
 				allJobs = append(allJobs, jobInfo{file: file, name: name})
 			}
 		}
 	}
 
 	if parsedFiles == 0 {
+		bus.Debug("No valid ocw workflow files found in current directory")
 		return fmt.Errorf("no workflow files found in current directory")
 	}
 	if len(allJobs) == 0 {
+		bus.Debug("No jobs found in any workflow file in current directory")
 		return fmt.Errorf("no jobs found in any workflow file")
 	}
 
+	bus.Debug(fmt.Sprintf("Found %d jobs in current directory: %v", len(allJobs), allJobs))
 	fmt.Println("Available jobs:")
 	fmt.Println()
 

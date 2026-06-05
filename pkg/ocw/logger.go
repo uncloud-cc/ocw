@@ -1,34 +1,70 @@
 package ocw
 
-// Logger is the contract used by the engine, compiler, and docker runtime.
-type Logger interface {
-	Debug(msg string, fields map[string]any)
-	Info(msg string, fields map[string]any)
-	Warn(msg string, fields map[string]any)
-	Error(msg string, fields map[string]any)
-	Event(ev Event)
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"sync"
+)
+
+// JSONLogger consumes events from a channel and writes them as NDJSON lines.
+type JSONLogger struct {
+	out io.Writer
+	mu  sync.Mutex
 }
 
-// LevelFilter wraps a Logger and suppresses Debug when allowDebug is false.
-type LevelFilter struct {
-	allowDebug bool
-	logger     Logger
+// NewJSONLogger creates a new NDJSON consumer that writes to out.
+func NewJSONLogger(out io.Writer) *JSONLogger {
+	return &JSONLogger{out: out}
 }
 
-func NewLevelFilter(allowDebug bool, logger Logger) *LevelFilter {
-	return &LevelFilter{
-		allowDebug: allowDebug,
-		logger:     logger,
+// Run reads events from ch until it is closed.
+func (j *JSONLogger) Run(ch <-chan IngestedEvent) {
+	for ev := range ch {
+		data, err := json.Marshal(ev)
+		if err != nil {
+			continue
+		}
+		j.mu.Lock()
+		fmt.Fprintln(j.out, string(data))
+		j.mu.Unlock()
 	}
 }
 
-func (l *LevelFilter) Debug(msg string, fields map[string]any) {
-	if l.allowDebug {
-		l.logger.Debug(msg, fields)
-	}
+// PrettyPrinter consumes events from a channel and renders them as pretty ANSI output.
+type PrettyPrinter struct {
+	out    io.Writer
+	styles *Styles
 }
 
-func (l *LevelFilter) Info(msg string, fields map[string]any)  { l.logger.Info(msg, fields) }
-func (l *LevelFilter) Warn(msg string, fields map[string]any)  { l.logger.Warn(msg, fields) }
-func (l *LevelFilter) Error(msg string, fields map[string]any) { l.logger.Error(msg, fields) }
-func (l *LevelFilter) Event(ev Event)                           { l.logger.Event(ev) }
+// NewPrettyPrinter creates a new pretty consumer that writes to out.
+func NewPrettyPrinter(out io.Writer) *PrettyPrinter {
+	return &PrettyPrinter{out: out, styles: NewStyles()}
+}
+
+// Run reads events from ch until it is closed.
+func (p *PrettyPrinter) Run(ch <-chan IngestedEvent) {
+	for ev := range ch {
+		switch e := ev.Event.(type) {
+		case *WorkflowStart:
+			fmt.Fprint(p.out, p.styles.JobBox(e.Name, e.Directory, e.LoadedFiles))
+		case *WorkflowComplete:
+			d := fmt.Sprintf("%dms", e.DurationMs)
+			fmt.Fprint(p.out, p.styles.CompletionBanner(e.Name, d, e.Success))
+		case *GroupHeader:
+			fmt.Fprint(p.out, p.styles.SectionHeader(e.Text))
+		case *StepStart:
+			fmt.Fprint(p.out, p.styles.StepBox(e.Name, e.StepType, e.Extra))
+		case *StepComplete:
+			fmt.Fprint(p.out, p.styles.StepComplete(e.Name, e.Success))
+		case *ContainerOutput:
+			if e.Step != "" {
+				fmt.Fprintf(p.out, "%s %s %s\n", p.styles.Value(e.Step), p.styles.Dim("|"), e.Line)
+			} else {
+				fmt.Fprintln(p.out, e.Line)
+			}
+		case *WorkflowOutputs:
+			fmt.Fprint(p.out, p.styles.OutputsBox(e.Title, e.Outputs))
+		}
+	}
+}
