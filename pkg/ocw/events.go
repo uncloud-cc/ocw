@@ -18,6 +18,11 @@ const (
 	EventLogInfo          = "log.info"
 	EventLogWarn          = "log.warn"
 	EventLogError         = "log.error"
+	EventServicesOverview      = "services.overview"
+	EventWaiting               = "waiting"
+	EventHealthCheckStart      = "healthcheck.start"
+	EventHealthCheckProgress   = "healthcheck.progress"
+	EventHealthCheckComplete   = "healthcheck.complete"
 )
 
 type LogDebug struct {
@@ -100,3 +105,25 @@ type WorkflowOutputs struct {
 }
 
 func (WorkflowOutputs) EventType() string { return EventWorkflowOutputs }
+
+type HealthCheckStart struct {
+	Name string `json:"name"`
+}
+
+func (HealthCheckStart) EventType() string { return EventHealthCheckStart }
+
+type HealthCheckProgress struct {
+	Name    string `json:"name"`
+	Attempt int    `json:"attempt"`
+	Status  string `json:"status,omitempty"`
+}
+
+func (HealthCheckProgress) EventType() string { return EventHealthCheckProgress }
+
+type HealthCheckComplete struct {
+	Name       string `json:"name"`
+	Success    bool   `json:"success"`
+	DurationMs int64  `json:"duration_ms"`
+}
+
+func (HealthCheckComplete) EventType() string { return EventHealthCheckComplete }

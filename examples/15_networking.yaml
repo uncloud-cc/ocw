@@ -4,6 +4,8 @@ sequence:
     id: redis # This becomes the hostname
     image: redis:7-alpine
     background: true
+    healthCheck:
+      cmd: redis-cli ping
 
   - name: Use Redis
     image: redis:7-alpine

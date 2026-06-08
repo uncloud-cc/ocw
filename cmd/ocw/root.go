@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	flow "github.com/Azure/go-workflow"
@@ -24,6 +27,7 @@ var (
 	jsonMode    bool
 	debugMode   bool
 	showSecrets bool
+	ciMode      bool
 )
 
 var rootCmd = &cobra.Command{
@@ -133,6 +137,9 @@ var rootCmd = &cobra.Command{
 		state.Meta["name"] = parsed.Name
 		state.Steps = make(map[string]map[string]string)
 
+		runID := ocw.NewRunID(12)
+		state.Meta["runID"] = runID
+
 		if inputsFile != "" {
 			loadedFiles = append(loadedFiles, inputsFile)
 		}
@@ -145,11 +152,29 @@ var rootCmd = &cobra.Command{
 		jsonMode = jsonMode || verbose
 		printer := ocw.NewPrinter(jsonMode, showSecrets, secretValues)
 
-		exec, err := ocw.NewDockerRuntime(parsed.Volumes, workflowDir, printer)
+		exec, err := ocw.NewDockerRuntime(parsed.Volumes, workflowDir, printer, runID)
 		if err != nil {
 			return fmt.Errorf("runtime: %w", err)
 		}
 		defer exec.Close()
+
+		// Auto-detect CI mode when stdout is not a TTY.
+		if !ciMode && !ocw.IsTerminal(int(os.Stdout.Fd())) {
+			ciMode = true
+		}
+
+		// Set up cancellable context with signal handling.
+		ctx, cancel := context.WithCancel(cmd.Context())
+		defer cancel()
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			select {
+			case <-sigCh:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
 
 		var workflow *flow.Workflow
 		var job *schema.Job
@@ -186,7 +211,7 @@ var rootCmd = &cobra.Command{
 		})
 		printer.PrintJobStart(displayName, workflowDir, loadedFiles)
 		start := time.Now()
-		runErr := workflow.Do(cmd.Context())
+		runErr := workflow.Do(ctx)
 		duration := time.Since(start)
 
 		// Determine which raw outputs to resolve
@@ -233,6 +258,15 @@ var rootCmd = &cobra.Command{
 			})
 		}
 
+		// On success, show active background services and optionally wait.
+		if runErr == nil && exec.HasActiveServices() {
+			printer.PrintServicesOverview(exec.ListServices())
+			if !ciMode {
+				printer.PrintWaitingMessage()
+				<-ctx.Done()
+			}
+		}
+
 		if runErr != nil {
 			return fmt.Errorf("run: %w", runErr)
 		}
@@ -247,6 +281,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging (automatically enables JSON logging)")
 	rootCmd.PersistentFlags().BoolVar(&showSecrets, "show-secrets", false, "Show secret values in output")
 	rootCmd.PersistentFlags().StringVarP(&outputsFile, "outputs", "o", "", "Write resolved outputs to a JSON file")
+	rootCmd.PersistentFlags().BoolVar(&ciMode, "ci", false, "Force CI mode (non-interactive, exit immediately after workflow)")
 }
 
 func Execute() error {

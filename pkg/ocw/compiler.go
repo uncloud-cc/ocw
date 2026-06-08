@@ -305,14 +305,26 @@ func compileRunStep(s *schema.RunStep, exec Runtime, state *State, printer *Prin
 			prefix = s.Image
 		}
 	}
+	stepType := "run"
+	if s.Background {
+		stepType = "service"
+	}
 	return &ocwStep{
 		name:     name,
-		stepType: "run",
+		stepType: stepType,
 		printer:  printer,
 		do: func(ctx context.Context) error {
 			interpolatedSchema, err := interpolateRunStepTemplates(s, state)
 			if err != nil {
 				return fmt.Errorf("Error while interpolating template value for step %s: %v", name, err)
+			}
+
+			if s.Background {
+				_, err := exec.StartService(ctx, interpolatedSchema, prefix)
+				if err != nil {
+					return fmt.Errorf("Error while starting service %s: %v", name, err)
+				}
+				return nil
 			}
 
 			outputs, err := exec.Run(ctx, interpolatedSchema, prefix)

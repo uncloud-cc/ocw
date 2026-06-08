@@ -8,12 +8,15 @@ Comprehensive rewrite of the first version of ocw.
 - [x] Implement build step outputs
 - [x] Implement run step outputs
 - [x] Implement `/workflow` mount
-- [ ] Implement volume mounts
 - [ ] Implement service (background) containers
 - [ ] Implement imported workflows
 - [ ] Implement Github Action
+- [ ] Finish injecting `bus.debug()` statements everywhere (making debugging trivial)
+- [ ] Finish migrating `printer.go` to just consume events
+- [ ] Finish documentation
 
 **Out of scope for v1**
+- [ ] Implement volume mounts (workflow dir should be enough actually!)
 - [ ] Step by step debugger
 - [ ] Debugging containers
 - [ ] Reloading containers on file changes

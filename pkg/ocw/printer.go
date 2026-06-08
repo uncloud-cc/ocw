@@ -35,17 +35,19 @@ type Styles struct {
 	// Box styles
 	jobBoxStyle            lipgloss.Style
 	outputsBoxStyle        lipgloss.Style
+	servicesBoxStyle       lipgloss.Style
 	completionSuccessStyle lipgloss.Style
 	completionErrorStyle   lipgloss.Style
 }
 
-func isTerminal(fd int) bool {
+// IsTerminal reports whether fd is a terminal.
+func IsTerminal(fd int) bool {
 	_, err := unix.IoctlGetWinsize(fd, unix.TIOCGWINSZ)
 	return err == nil
 }
 
 func NewStyles() *Styles {
-	enabled := isTerminal(int(os.Stdout.Fd()))
+	enabled := IsTerminal(int(os.Stdout.Fd()))
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
 		enabled = false
 	}
@@ -85,6 +87,10 @@ func NewStyles() *Styles {
 		outputsBoxStyle: lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), true, false).
 			BorderForeground(adaptiveGray).
+			Padding(0, 2),
+		servicesBoxStyle: lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), true, false).
+			BorderForeground(adaptiveCyan).
 			Padding(0, 2),
 		completionSuccessStyle: lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), true, false).
@@ -227,6 +233,28 @@ func (s *Styles) CompletionBanner(name, duration string, success bool) string {
 		return "\n" + s.completionSuccessStyle.Render(text) + "\n"
 	}
 	return "\n" + s.completionErrorStyle.Render(text) + "\n"
+}
+
+func (s *Styles) ServicesBox(services []ServiceInfo) string {
+	if len(services) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(s.Header("Background services running"))
+	sb.WriteString("\n")
+	for i, svc := range services {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(s.StepName(svc.Name))
+		if len(svc.Exposed) > 0 {
+			for _, port := range svc.Exposed {
+				sb.WriteString("\n  → ")
+				sb.WriteString(s.Info(fmt.Sprintf("%s://localhost:%d", port.Protocol, port.HostPort)))
+			}
+		}
+	}
+	return "\n" + s.servicesBoxStyle.Render(sb.String()) + "\n"
 }
 
 // ── Printer: pretty output OR NDJSON protocol ───────────────
@@ -425,6 +453,62 @@ func (p *Printer) PrintCompletionBanner(name string, duration time.Duration, suc
 		return
 	}
 	p.writePretty(p.styles.CompletionBanner(name, duration.Round(time.Millisecond).String(), success))
+}
+
+// PrintServicesOverview prints the list of active background services.
+func (p *Printer) PrintServicesOverview(services []ServiceInfo) {
+	if p.jsonMode {
+		p.emitJSON(EventServicesOverview, map[string]any{"services": services})
+		return
+	}
+	p.writePretty(p.styles.ServicesBox(services))
+}
+
+// PrintWaitingMessage prints the "Press Ctrl+C to stop" prompt.
+func (p *Printer) PrintWaitingMessage() {
+	if p.jsonMode {
+		p.emitJSON(EventWaiting, map[string]any{"message": "Press Ctrl+C to stop"})
+		return
+	}
+	p.writePretty(p.styles.Dim("\nPress Ctrl+C to stop\n"))
+}
+
+// PrintHealthCheckStart prints the "Waiting for..." message with a newline.
+func (p *Printer) PrintHealthCheckStart(name string) {
+	if p.jsonMode {
+		p.emitJSON(EventHealthCheckStart, map[string]any{"name": name})
+		return
+	}
+	p.writePretty(p.styles.Dim("→ ") + p.styles.Info("Waiting for "+name+" to become healthy") + p.styles.Dim("...") + "\n")
+}
+
+// PrintHealthCheckTick emits a JSON progress event. In pretty mode it is a no-op
+// because concurrent log streaming makes inline dots unreliable.
+func (p *Printer) PrintHealthCheckTick(name string, attempt int, status string) {
+	if p.jsonMode {
+		p.emitJSON(EventHealthCheckProgress, map[string]any{
+			"name":    name,
+			"attempt": attempt,
+			"status":  status,
+		})
+	}
+}
+
+// PrintHealthCheckEnd prints the final health check result on its own line.
+func (p *Printer) PrintHealthCheckEnd(name string, success bool, duration time.Duration) {
+	if p.jsonMode {
+		p.emitJSON(EventHealthCheckComplete, map[string]any{
+			"name":        name,
+			"success":     success,
+			"duration_ms": duration.Milliseconds(),
+		})
+		return
+	}
+	if success {
+		p.writePretty(p.styles.Success("✓ healthy") + " " + p.styles.Dim("("+duration.Round(time.Millisecond).String()+")") + "\n")
+	} else {
+		p.writePretty(p.styles.Error("✗ failed") + "\n")
+	}
 }
 
 // PrintSectionHeader prints a group header (e.g. ">>> Running 4 steps in sequence").
