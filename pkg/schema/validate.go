@@ -323,8 +323,8 @@ func (v *validator) validateSequenceStep(step *SequenceStep) {
 }
 
 func (v *validator) validateWorkflowStep(step *WorkflowStep) {
-	if step.Workflow.From == "" {
-		v.withPath("workflow.from").addError("is required")
+	if step.Workflow.Uses == "" {
+		v.withPath("workflow.uses").addError("is required")
 	}
 
 	// Validate inherit values if present

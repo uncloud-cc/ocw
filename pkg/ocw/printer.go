@@ -470,7 +470,7 @@ func (p *Printer) PrintWaitingMessage() {
 		p.emitJSON(EventWaiting, map[string]any{"message": "Press Ctrl+C to stop"})
 		return
 	}
-	p.writePretty(p.styles.Dim("\nPress Ctrl+C to stop\n"))
+	p.writePretty(p.styles.Dim("\nPress Ctrl+C to stop\n\n"))
 }
 
 // PrintHealthCheckStart prints the "Waiting for..." message with a newline.

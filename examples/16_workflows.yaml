@@ -1,0 +1,9 @@
+name: Workflow Import Example
+sequence:
+  - name: Run local workflow
+    workflow:
+      uses: ./13_inputs.yaml
+      inputs:
+        DB_PORT: 1234
+      secrets:
+        API_KEY: "parent_workflow_api_key-123456789"

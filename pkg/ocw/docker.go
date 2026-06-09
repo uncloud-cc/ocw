@@ -41,6 +41,10 @@ func (w *linePrefixWriter) Write(p []byte) (int, error) {
 			break
 		}
 		line := string(w.buf[:idx-1]) // exclude the newline
+		// Strip trailing \r from CRLF line endings (common in Docker container output).
+		if len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
 		w.emit(line)
 		w.buf = w.buf[idx:]
 	}

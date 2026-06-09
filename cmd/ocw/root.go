@@ -190,11 +190,11 @@ var rootCmd = &cobra.Command{
 			} else {
 				displayName = jobName
 			}
-			workflow, err = ocw.CompileJob(job, exec, state, printer)
-		} else {
-			if ocw.HasDirectFlow(parsed) {
-				workflow, err = ocw.CompileOCW(parsed, exec, state, printer)
-			} else if ocw.HasJobs(parsed) {
+		workflow, err = ocw.CompileJob(job, exec, state, printer, workflowDir)
+	} else {
+		if ocw.HasDirectFlow(parsed) {
+			workflow, err = ocw.CompileOCW(parsed, exec, state, printer, workflowDir)
+		} else if ocw.HasJobs(parsed) {
 				return listJobsInFile(filePath, parsed)
 			} else {
 				return fmt.Errorf("no workflow flow or jobs found in %s", filePath)

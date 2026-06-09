@@ -410,8 +410,8 @@ func TestNewState(t *testing.T) {
 		if state.Inputs["DB_USER"] != "admin" {
 			t.Errorf("expected DB_USER=admin, got %q", state.Inputs["DB_USER"])
 		}
-		if os.Getenv("DB_PORT") != "8080" {
-			t.Errorf("expected env DB_PORT=8080, got %q", os.Getenv("DB_PORT"))
+		if state.Env["DB_PORT"] != "8080" {
+			t.Errorf("expected env DB_PORT=8080, got %q", state.Env["DB_PORT"])
 		}
 	})
 
@@ -427,8 +427,8 @@ func TestNewState(t *testing.T) {
 		if state.Inputs["DB_PORT"] != "5432" {
 			t.Errorf("expected DB_PORT=5432, got %q", state.Inputs["DB_PORT"])
 		}
-		if os.Getenv("DB_PORT") != "5432" {
-			t.Errorf("expected env DB_PORT=5432, got %q", os.Getenv("DB_PORT"))
+		if state.Env["DB_PORT"] != "5432" {
+			t.Errorf("expected env DB_PORT=5432, got %q", state.Env["DB_PORT"])
 		}
 	})
 
@@ -451,8 +451,8 @@ func TestNewState(t *testing.T) {
 		if state.Inputs["DB_PORT"] != "3306" {
 			t.Errorf("expected DB_PORT=3306, got %q", state.Inputs["DB_PORT"])
 		}
-		if os.Getenv("DB_PORT") != "3306" {
-			t.Errorf("expected env DB_PORT=3306, got %q", os.Getenv("DB_PORT"))
+		if state.Env["DB_PORT"] != "3306" {
+			t.Errorf("expected env DB_PORT=3306, got %q", state.Env["DB_PORT"])
 		}
 	})
 

@@ -3,6 +3,7 @@ package ocw
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -12,30 +13,25 @@ import (
 )
 
 // CompileJob turns an OCW job into a *flow.Workflow.
-func CompileJob(job *schema.Job, exec Runtime, state *State, printer *Printer) (*flow.Workflow, error) {
+func CompileJob(job *schema.Job, exec Runtime, state *State, printer *Printer, baseDir string) (*flow.Workflow, error) {
 	w := new(flow.Workflow)
+	fetcher, err := NewFetcher()
+	if err != nil {
+		return nil, fmt.Errorf("create fetcher: %w", err)
+	}
 	flowType := GetJobFlowType(job)
 	printer.Debug("compile_job", map[string]any{"flowType": flowType})
 	switch flowType {
 	case "sequence":
 		steps := GetJobSteps(job)
-		compiled, err := compileSteps(steps, exec, state, printer, false)
+		compiled, err := compileSteps(steps, exec, state, printer, false, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
-		as := flow.Pipe(compiled...)
-		var once sync.Once
-		as.BeforeStep(func(ctx context.Context, step flow.Steper) (context.Context, error) {
-			once.Do(func() {
-				names := stepNames(compiled)
-				printer.PrintSectionHeader(fmt.Sprintf("Running %d steps in sequence: %s", len(names), strings.Join(names, ", ")))
-			})
-			return ctx, nil
-		})
-		w.Add(as)
+		w.Add(flow.Pipe(compiled...))
 	case "parallel":
 		steps := GetJobSteps(job)
-		compiled, err := compileSteps(steps, exec, state, printer, true)
+		compiled, err := compileSteps(steps, exec, state, printer, true, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -51,13 +47,13 @@ func CompileJob(job *schema.Job, exec Runtime, state *State, printer *Printer) (
 		w.Add(as)
 	case "step":
 		steps := GetJobSteps(job)
-		s, err := compileStep(steps[0], exec, state, printer, false)
+		s, err := compileStep(steps[0], exec, state, printer, false, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
 		w.Add(flow.Step(s))
 	case "switch":
-		swStep, err := compileJobSwitch(job, exec, state, printer)
+		swStep, err := compileJobSwitch(job, exec, state, printer, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -69,30 +65,25 @@ func CompileJob(job *schema.Job, exec Runtime, state *State, printer *Printer) (
 }
 
 // CompileOCW compiles an OCW schema's top-level flow into a workflow.
-func CompileOCW(ocw *schema.OCW, exec Runtime, state *State, printer *Printer) (*flow.Workflow, error) {
+func CompileOCW(ocw *schema.OCW, exec Runtime, state *State, printer *Printer, baseDir string) (*flow.Workflow, error) {
 	w := new(flow.Workflow)
+	fetcher, err := NewFetcher()
+	if err != nil {
+		return nil, fmt.Errorf("create fetcher: %w", err)
+	}
 	flowType := GetFlowType(ocw)
 	printer.Debug("compile_ocw", map[string]any{"flowType": flowType})
 	switch flowType {
 	case "sequence":
 		steps := GetSteps(ocw)
-		compiled, err := compileSteps(steps, exec, state, printer, false)
+		compiled, err := compileSteps(steps, exec, state, printer, false, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
-		as := flow.Pipe(compiled...)
-		var once sync.Once
-		as.BeforeStep(func(ctx context.Context, step flow.Steper) (context.Context, error) {
-			once.Do(func() {
-				names := stepNames(compiled)
-				printer.PrintSectionHeader(fmt.Sprintf("Running %d steps in sequence: %s", len(names), strings.Join(names, ", ")))
-			})
-			return ctx, nil
-		})
-		w.Add(as)
+		w.Add(flow.Pipe(compiled...))
 	case "parallel":
 		steps := GetSteps(ocw)
-		compiled, err := compileSteps(steps, exec, state, printer, true)
+		compiled, err := compileSteps(steps, exec, state, printer, true, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -107,7 +98,7 @@ func CompileOCW(ocw *schema.OCW, exec Runtime, state *State, printer *Printer) (
 		})
 		w.Add(as)
 	case "switch":
-		swStep, err := compileOCWSwitch(ocw, exec, state, printer)
+		swStep, err := compileOCWSwitch(ocw, exec, state, printer, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -237,15 +228,7 @@ func (s *sequenceStep) String() string {
 }
 
 func (s *sequenceStep) BuildStep() {
-	as := flow.Pipe(s.steps...)
-	var once sync.Once
-	as.BeforeStep(func(ctx context.Context, step flow.Steper) (context.Context, error) {
-		once.Do(func() {
-			s.printer.PrintSectionHeader(fmt.Sprintf("Running %d steps in sequence: %s", len(s.names), strings.Join(s.names, ", ")))
-		})
-		return ctx, nil
-	})
-	s.Add(as)
+	s.Add(flow.Pipe(s.steps...))
 }
 
 // stepNames extracts human-readable names from a slice of compiled steps.
@@ -261,10 +244,10 @@ func stepNames(steps []flow.Steper) []string {
 	return names
 }
 
-func compileSteps(steps []schema.Step, exec Runtime, state *State, printer *Printer, usePrefix bool) ([]flow.Steper, error) {
+func compileSteps(steps []schema.Step, exec Runtime, state *State, printer *Printer, usePrefix bool, baseDir string, fetcher *Fetcher) ([]flow.Steper, error) {
 	var out []flow.Steper
 	for _, s := range steps {
-		compiled, err := compileStep(s, exec, state, printer, usePrefix)
+		compiled, err := compileStep(s, exec, state, printer, usePrefix, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -273,18 +256,20 @@ func compileSteps(steps []schema.Step, exec Runtime, state *State, printer *Prin
 	return out, nil
 }
 
-func compileStep(s schema.Step, exec Runtime, state *State, printer *Printer, usePrefix bool) (flow.Steper, error) {
+func compileStep(s schema.Step, exec Runtime, state *State, printer *Printer, usePrefix bool, baseDir string, fetcher *Fetcher) (flow.Steper, error) {
 	switch {
 	case s.RunStep != nil:
 		return compileRunStep(s.RunStep, exec, state, printer, usePrefix)
 	case s.BuildStep != nil:
 		return compileBuildStep(s.BuildStep, exec, state, printer, usePrefix)
 	case s.ParallelStep != nil:
-		return compileParallelStep(s.ParallelStep, exec, state, printer)
+		return compileParallelStep(s.ParallelStep, exec, state, printer, baseDir, fetcher)
 	case s.SequenceStep != nil:
-		return compileSequenceStep(s.SequenceStep, exec, state, printer)
+		return compileSequenceStep(s.SequenceStep, exec, state, printer, baseDir, fetcher)
 	case s.SwitchStep != nil:
-		return compileSwitchStep(s.SwitchStep, exec, state, printer)
+		return compileSwitchStep(s.SwitchStep, exec, state, printer, baseDir, fetcher)
+	case s.WorkflowStep != nil:
+		return compileWorkflowStep(s.WorkflowStep, exec, state, printer, baseDir, fetcher)
 	default:
 		return nil, fmt.Errorf("unsupported step type")
 	}
@@ -804,8 +789,8 @@ func compileBuildStep(s *schema.BuildStep, exec Runtime, state *State, printer *
 	}, nil
 }
 
-func compileParallelStep(s *schema.ParallelStep, exec Runtime, state *State, printer *Printer) (flow.Steper, error) {
-	compiled, err := compileSteps(s.Parallel, exec, state, printer, true)
+func compileParallelStep(s *schema.ParallelStep, exec Runtime, state *State, printer *Printer, baseDir string, fetcher *Fetcher) (flow.Steper, error) {
+	compiled, err := compileSteps(s.Parallel, exec, state, printer, true, baseDir, fetcher)
 	if err != nil {
 		return nil, err
 	}
@@ -816,8 +801,8 @@ func compileParallelStep(s *schema.ParallelStep, exec Runtime, state *State, pri
 	}, nil
 }
 
-func compileSequenceStep(s *schema.SequenceStep, exec Runtime, state *State, printer *Printer) (flow.Steper, error) {
-	compiled, err := compileSteps(s.Sequence, exec, state, printer, false)
+func compileSequenceStep(s *schema.SequenceStep, exec Runtime, state *State, printer *Printer, baseDir string, fetcher *Fetcher) (flow.Steper, error) {
+	compiled, err := compileSteps(s.Sequence, exec, state, printer, false, baseDir, fetcher)
 	if err != nil {
 		return nil, err
 	}
@@ -828,10 +813,10 @@ func compileSequenceStep(s *schema.SequenceStep, exec Runtime, state *State, pri
 	}, nil
 }
 
-func compileSwitchStep(s *schema.SwitchStep, exec Runtime, state *State, printer *Printer) (flow.Steper, error) {
+func compileSwitchStep(s *schema.SwitchStep, exec Runtime, state *State, printer *Printer, baseDir string, fetcher *Fetcher) (flow.Steper, error) {
 	cases := make(map[string]flow.Steper)
 	for caseValue, caseStepSchema := range s.Case {
-		compiled, err := compileStep(caseStepSchema, exec, state, printer, false)
+		compiled, err := compileStep(caseStepSchema, exec, state, printer, false, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -840,7 +825,7 @@ func compileSwitchStep(s *schema.SwitchStep, exec Runtime, state *State, printer
 
 	var def flow.Steper
 	if s.Default != nil {
-		compiled, err := compileStep(*s.Default, exec, state, printer, false)
+		compiled, err := compileStep(*s.Default, exec, state, printer, false, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -855,13 +840,13 @@ func compileSwitchStep(s *schema.SwitchStep, exec Runtime, state *State, printer
 	}, nil
 }
 
-func compileJobSwitch(job *schema.Job, exec Runtime, state *State, printer *Printer) (flow.Steper, error) {
+func compileJobSwitch(job *schema.Job, exec Runtime, state *State, printer *Printer, baseDir string, fetcher *Fetcher) (flow.Steper, error) {
 	if job.Switch == nil {
 		return nil, fmt.Errorf("switch expression is nil")
 	}
 	cases := make(map[string]flow.Steper)
 	for caseValue, caseStepSchema := range job.Case {
-		compiled, err := compileStep(caseStepSchema, exec, state, printer, false)
+		compiled, err := compileStep(caseStepSchema, exec, state, printer, false, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -870,7 +855,7 @@ func compileJobSwitch(job *schema.Job, exec Runtime, state *State, printer *Prin
 
 	var def flow.Steper
 	if job.Default != nil {
-		compiled, err := compileStep(*job.Default, exec, state, printer, false)
+		compiled, err := compileStep(*job.Default, exec, state, printer, false, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -885,13 +870,13 @@ func compileJobSwitch(job *schema.Job, exec Runtime, state *State, printer *Prin
 	}, nil
 }
 
-func compileOCWSwitch(ocw *schema.OCW, exec Runtime, state *State, printer *Printer) (flow.Steper, error) {
+func compileOCWSwitch(ocw *schema.OCW, exec Runtime, state *State, printer *Printer, baseDir string, fetcher *Fetcher) (flow.Steper, error) {
 	if ocw.Switch == nil {
 		return nil, fmt.Errorf("switch expression is nil")
 	}
 	cases := make(map[string]flow.Steper)
 	for caseValue, caseStepSchema := range ocw.Case {
-		compiled, err := compileStep(caseStepSchema, exec, state, printer, false)
+		compiled, err := compileStep(caseStepSchema, exec, state, printer, false, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -900,7 +885,7 @@ func compileOCWSwitch(ocw *schema.OCW, exec Runtime, state *State, printer *Prin
 
 	var def flow.Steper
 	if ocw.Default != nil {
-		compiled, err := compileStep(*ocw.Default, exec, state, printer, false)
+		compiled, err := compileStep(*ocw.Default, exec, state, printer, false, baseDir, fetcher)
 		if err != nil {
 			return nil, err
 		}
@@ -913,4 +898,156 @@ func compileOCWSwitch(ocw *schema.OCW, exec Runtime, state *State, printer *Prin
 		def:      def,
 		state:    state,
 	}, nil
+}
+
+// workflowStep wraps a compiled nested workflow as a single go-workflow Steper.
+type workflowStep struct {
+	name     string
+	workflow *flow.Workflow
+	printer  *Printer
+}
+
+func (w *workflowStep) String() string { return w.name }
+
+func (w *workflowStep) Do(ctx context.Context) error {
+	w.printer.PrintSectionHeader(fmt.Sprintf("Running workflow %s", w.name))
+	w.printer.Debug("workflow_step_start", map[string]any{"name": w.name})
+	start := time.Now()
+	err := w.workflow.Do(ctx)
+	duration := time.Since(start)
+	w.printer.Debug("workflow_step_complete", map[string]any{
+		"name":        w.name,
+		"success":     err == nil,
+		"duration_ms": duration.Milliseconds(),
+	})
+	return err
+}
+
+// compileWorkflowStep resolves, parses, and compiles a referenced workflow.
+func compileWorkflowStep(s *schema.WorkflowStep, exec Runtime, state *State, printer *Printer, baseDir string, fetcher *Fetcher) (flow.Steper, error) {
+	// Use the workflow source (Uses) as the display name so the header
+	// shows where the workflow was imported from.
+	name := s.Workflow.Uses
+	if name == "" {
+		name = s.Name
+	}
+
+	// Resolve workflow file path
+	var workflowPath string
+	if isLocalWorkflowRef(s.Workflow.Uses) {
+		workflowPath = filepath.Join(baseDir, s.Workflow.Uses)
+	} else {
+		ref, err := ParseWorkflowRef(s.Workflow.Uses)
+		if err != nil {
+			return nil, fmt.Errorf("parse workflow ref %q: %w", s.Workflow.Uses, err)
+		}
+		workflowPath, err = fetcher.Fetch(ref)
+		if err != nil {
+			return nil, fmt.Errorf("fetch workflow %q: %w", s.Workflow.Uses, err)
+		}
+	}
+
+	// Parse the referenced workflow
+	parsed, err := ParseFile(workflowPath)
+	if err != nil {
+		return nil, fmt.Errorf("parse workflow %s: %w", workflowPath, err)
+	}
+	if err := parsed.Validate(); err != nil {
+		return nil, fmt.Errorf("validate workflow %s: %w", workflowPath, err)
+	}
+
+	// Create child state starting empty — child workflows do NOT inherit
+	// the parent's process environment unless explicitly configured.
+	childState := &State{
+		Meta:    state.Meta,
+		Steps:   state.Steps,
+		Inputs:  make(map[string]string),
+		Secrets: make(map[string]string),
+		Env:     make(map[string]string),
+	}
+
+	// Apply the imported workflow's own declared defaults.
+	if parsed.Inputs != nil {
+		for key, decl := range parsed.Inputs {
+			if decl.Value != "" {
+				childState.Env[key] = decl.Value
+				if decl.IsSecret {
+					childState.Secrets[key] = decl.Value
+				} else {
+					childState.Inputs[key] = decl.Value
+				}
+			}
+		}
+	}
+
+	// Apply inheritance rules from the parent workflow.
+	inherit := s.Workflow.Inherit
+	if inherit == nil {
+		// Default: inherit nothing
+		inherit = &schema.InheritConfig{Env: schema.InheritNone, Secrets: schema.InheritNone}
+	}
+	if inherit.Env == schema.InheritAll {
+		for k, v := range state.Inputs {
+			if _, exists := childState.Inputs[k]; !exists {
+				childState.Inputs[k] = v
+			}
+		}
+		for k, v := range state.Env {
+			if _, exists := childState.Env[k]; !exists {
+				childState.Env[k] = v
+			}
+		}
+	}
+	if inherit.Secrets == schema.InheritAll {
+		for k, v := range state.Secrets {
+			if _, exists := childState.Secrets[k]; !exists {
+				childState.Secrets[k] = v
+			}
+		}
+	}
+
+	// Apply explicit inputs overrides from the workflow step config.
+	for key, val := range s.Workflow.Inputs {
+		interpolated, err := state.InterpolateTemplate(val.Value)
+		if err != nil {
+			return nil, fmt.Errorf("interpolate inputs %q: %w", key, err)
+		}
+		childState.Env[key] = interpolated
+		if val.IsSecret {
+			childState.Secrets[key] = interpolated
+		} else {
+			childState.Inputs[key] = interpolated
+		}
+	}
+
+	// Apply explicit secrets overrides from the workflow step config.
+	for key, val := range s.Workflow.Secrets {
+		if val.Plain != "" {
+			childState.Secrets[key] = val.Plain
+			childState.Env[key] = val.Plain
+		} else if val.Secure != nil {
+			childState.Secrets[key] = val.Secure.Secure
+			childState.Env[key] = val.Secure.Secure
+		}
+	}
+
+	// Compile the nested workflow using its own directory as base
+	nestedDir := filepath.Dir(workflowPath)
+	nestedWorkflow, err := CompileOCW(parsed, exec, childState, printer, nestedDir)
+	if err != nil {
+		return nil, fmt.Errorf("compile workflow %s: %w", workflowPath, err)
+	}
+
+	return &workflowStep{
+		name:     name,
+		workflow: nestedWorkflow,
+		printer:  printer,
+	}, nil
+}
+
+// isLocalWorkflowRef returns true if the reference is a local path.
+func isLocalWorkflowRef(from string) bool {
+	return strings.HasPrefix(from, ".") ||
+		strings.HasPrefix(from, "/") ||
+		strings.HasPrefix(from, "\\")
 }

@@ -21,22 +21,34 @@ type State struct {
 	Secrets map[string]string
 	// Steps stores the output of steps
 	Steps map[string]map[string]string
+	// Env is a snapshot of environment variables available for {{ env.KEY }}
+	// templates. It is isolated per workflow so child workflows don't
+	// accidentally leak parent environment values.
+	Env map[string]string
 
 	mu sync.RWMutex
 }
 
 // NewState initializes a State from inputs, environment variables,
-// and an optional JSON input file. Resolved values are injected into the
-// process environment so {{ env.KEY }} templates work seamlessly.
+// and an optional JSON input file. Environment variables are snapshotted
+// into state.Env so {{ env.KEY }} templates are isolated per workflow.
 func NewState(inputConfig *schema.Inputs, inputFile string) (*State, error) {
 	state := &State{
 		Meta:    make(map[string]string),
 		Inputs:  make(map[string]string),
 		Secrets: make(map[string]string),
 		Steps:   make(map[string]map[string]string),
+		Env:     make(map[string]string),
 	}
 
-	// No inputs declared → return empty state
+	// Snapshot current process environment so {{ env }} works
+	for _, e := range os.Environ() {
+		if i := strings.IndexByte(e, '='); i >= 0 {
+			state.Env[e[:i]] = e[i+1:]
+		}
+	}
+
+	// No inputs declared → return state with just the env snapshot
 	if inputConfig == nil || len(*inputConfig) == 0 {
 		return state, nil
 	}
@@ -60,8 +72,8 @@ func NewState(inputConfig *schema.Inputs, inputFile string) (*State, error) {
 		switch {
 		case fileValues[key] != "":
 			value = fileValues[key]
-		case os.Getenv(key) != "":
-			value = os.Getenv(key)
+		case state.Env[key] != "":
+			value = state.Env[key]
 		case decl.Value != "":
 			value = decl.Value
 		default:
@@ -71,8 +83,8 @@ func NewState(inputConfig *schema.Inputs, inputFile string) (*State, error) {
 			)
 		}
 
-		// Publish to process env so {{ env.KEY }} works with input defaults
-		os.Setenv(key, value)
+		// Publish inputs into the isolated env snapshot so {{ env.KEY }} works
+		state.Env[key] = value
 
 		if decl.IsSecret {
 			state.Secrets[key] = value
@@ -150,7 +162,11 @@ func (s *State) InterpolateTemplate(input string) (string, error) {
 			return value
 		case "env":
 			key := parts[1]
-			value := os.Getenv(key)
+			value, exists := s.Env[key]
+			if !exists {
+				err = fmt.Errorf("Could not find key '%s' in env", key)
+				return ""
+			}
 			return value
 		}
 
@@ -199,6 +215,7 @@ func (s *State) Clone() *State {
 		Inputs:  make(map[string]string, len(s.Inputs)),
 		Secrets: make(map[string]string, len(s.Secrets)),
 		Steps:   make(map[string]map[string]string, len(s.Steps)),
+		Env:     make(map[string]string, len(s.Env)),
 	}
 	for k, v := range s.Meta {
 		cloned.Meta[k] = v
@@ -208,6 +225,9 @@ func (s *State) Clone() *State {
 	}
 	for k, v := range s.Secrets {
 		cloned.Secrets[k] = v
+	}
+	for k, v := range s.Env {
+		cloned.Env[k] = v
 	}
 	for stepID, outputs := range s.Steps {
 		cloned.Steps[stepID] = make(map[string]string, len(outputs))

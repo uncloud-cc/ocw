@@ -119,7 +119,7 @@ jobs:
   test:
     sequence:
       - workflow:
-          from: ./other.yaml
+          uses: ./other.yaml
 `,
 			wantErr: false,
 		},
@@ -132,7 +132,7 @@ jobs:
   test:
     sequence:
       - workflow:
-          from: ./other.yaml
+          uses: ./other.yaml
           inherit:
             secrets: all
             env: none
