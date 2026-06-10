@@ -27,8 +27,12 @@ inputs:
     description: 'Force remove existing containers (-force flag)'
     required: false
     default: 'false'
-  verbose:
-    description: 'Enable verbose logging (-verbose flag)'
+  debug:
+    description: 'Enable debug logging (--debug flag)'
+    required: false
+    default: 'false'
+  json:
+    description: 'Emit NDJSON output (--json flag)'
     required: false
     default: 'false'
   validate:
@@ -143,8 +147,12 @@ runs:
           CMD="$CMD -force"
         fi
 
-        if [ "${{ inputs.verbose }}" = "true" ]; then
-          CMD="$CMD -verbose"
+        if [ "${{ inputs.debug }}" = "true" ]; then
+          CMD="$CMD --debug"
+        fi
+
+        if [ "${{ inputs.json }}" = "true" ]; then
+          CMD="$CMD --json"
         fi
 
         if [ "${{ inputs.validate }}" = "true" ]; then

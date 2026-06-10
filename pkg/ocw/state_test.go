@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/uncloud-cc/ocw/pkg/schema"
@@ -465,7 +466,7 @@ func TestNewState(t *testing.T) {
 			t.Fatal("expected error for missing required input, got nil")
 		}
 		expected := `required input "API_KEY" is not set`
-		if !contains(err.Error(), expected) {
+		if !strings.Contains(err.Error(), expected) {
 			t.Errorf("expected error to contain %q, got %q", expected, err.Error())
 		}
 	})
@@ -523,7 +524,7 @@ func TestNewState(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for invalid JSON, got nil")
 		}
-		if !contains(err.Error(), "parse input file") {
+		if !strings.Contains(err.Error(), "parse input file") {
 			t.Errorf("expected error about parsing input file, got %q", err.Error())
 		}
 	})
@@ -536,7 +537,7 @@ func TestNewState(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for missing file, got nil")
 		}
-		if !contains(err.Error(), "read input file") {
+		if !strings.Contains(err.Error(), "read input file") {
 			t.Errorf("expected error about reading input file, got %q", err.Error())
 		}
 	})
@@ -564,25 +565,160 @@ func TestNewState(t *testing.T) {
 	})
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || len(s) > 0 && containsHelper(s, substr))
+func TestResolveOutputs(t *testing.T) {
+	tests := []struct {
+		name        string
+		outputs     map[string]string
+		state       *State
+		expected    map[string]string
+		expectedErr error
+	}{
+		{
+			name:        "empty outputs map returns nil",
+			outputs:     map[string]string{},
+			state:       &State{},
+			expected:    nil,
+			expectedErr: nil,
+		},
+		{
+			name:    "nil outputs map returns nil",
+			outputs: nil,
+			state: &State{
+				Meta:    map[string]string{"job": "test"},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
+			},
+			expected:    nil,
+			expectedErr: nil,
+		},
+		{
+			name: "resolves single output",
+			outputs: map[string]string{
+				"url": "https://example.com/{{ meta.job }}",
+			},
+			state: &State{
+				Meta:    map[string]string{"job": "deploy"},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
+			},
+			expected: map[string]string{
+				"url": "https://example.com/deploy",
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "resolves multiple outputs with different namespaces",
+			outputs: map[string]string{
+				"image":   "{{ steps.build.image }}:{{ steps.build.tag }}",
+				"api_url": "{{ inputs.BASE_URL }}/api",
+			},
+			state: &State{
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{"BASE_URL": "https://app.test"},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{"build": {"image": "myapp", "tag": "v1.2.3"}},
+			},
+			expected: map[string]string{
+				"image":   "myapp:v1.2.3",
+				"api_url": "https://app.test/api",
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "resolves outputs with secrets namespace",
+			outputs: map[string]string{
+				"token": "Bearer {{ secrets.API_KEY }}",
+			},
+			state: &State{
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{"API_KEY": "shh"},
+				Steps:   map[string]map[string]string{},
+			},
+			expected: map[string]string{
+				"token": "Bearer shh",
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "resolves plain string without templates",
+			outputs: map[string]string{
+				"static": "no templates here",
+			},
+			state: &State{
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
+			},
+			expected: map[string]string{
+				"static": "no templates here",
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "returns error when interpolation fails",
+			outputs: map[string]string{
+				"bad": "{{ meta.missing }}",
+			},
+			state: &State{
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
+			},
+			expected:    nil,
+			expectedErr: fmt.Errorf(`output "bad": Could not find key 'missing' in meta namespace`),
+		},
+		{
+			name: "returns error on first failing key",
+			outputs: map[string]string{
+				"good": "ok",
+				"bad":  "{{ inputs.nope }}",
+			},
+			state: &State{
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
+			},
+			expected:    nil,
+			expectedErr: fmt.Errorf(`output "bad": Could not find key 'nope' in inputs`),
+		},
+		{
+			name: "preserves key order via map iteration",
+			outputs: map[string]string{
+				"a": "A",
+				"b": "B",
+				"c": "C",
+			},
+			state: &State{
+				Meta:    map[string]string{},
+				Inputs:  map[string]string{},
+				Secrets: map[string]string{},
+				Steps:   map[string]map[string]string{},
+			},
+			expected: map[string]string{
+				"a": "A",
+				"b": "B",
+				"c": "C",
+			},
+			expectedErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := tt.state.ResolveOutputs(tt.outputs)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("ResolveOutputs() = %v; expected %v", result, tt.expected)
+			}
+			if !errorsEqual(err, tt.expectedErr) {
+				t.Errorf("ResolveOutputs() error = %v; expected %v", err, tt.expectedErr)
+			}
+		})
+	}
 }
 
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-func errorsEqual(a, b error) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	return a.Error() == b.Error()
-}

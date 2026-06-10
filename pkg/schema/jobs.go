@@ -33,7 +33,7 @@ type Job struct {
 	// Sequence runs steps in sequence
 	Sequence []Step `yaml:"sequence,omitempty" json:"sequence,omitempty"`
 	// Switch conditionally executes steps
-	Switch *string `yaml:"switch,omitempty" json:"switch,omitempty"`
+	Switch string `yaml:"switch,omitempty" json:"switch,omitempty"`
 	// Case are the switch case branches
 	Case map[string]Step `yaml:"case,omitempty" json:"case,omitempty"`
 	// Default is the switch default branch
@@ -90,7 +90,7 @@ func getJobFlowType(j *Job) string {
 	if len(j.Sequence) > 0 {
 		return "sequence"
 	}
-	if j.Switch != nil {
+	if j.Switch != "" {
 		return "switch"
 	}
 	if j.Step != nil {

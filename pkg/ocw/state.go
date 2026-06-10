@@ -237,3 +237,20 @@ func (s *State) Clone() *State {
 	}
 	return cloned
 }
+
+// ResolveOutputs interpolates a raw outputs map (from schema) against the
+// current workflow state. It returns a resolved map ready for display.
+func (s *State) ResolveOutputs(outputs map[string]string) (map[string]string, error) {
+	if len(outputs) == 0 {
+		return nil, nil
+	}
+	resolved := make(map[string]string, len(outputs))
+	for key, template := range outputs {
+		value, err := s.InterpolateTemplate(template)
+		if err != nil {
+			return nil, fmt.Errorf("output %q: %w", key, err)
+		}
+		resolved[key] = value
+	}
+	return resolved, nil
+}

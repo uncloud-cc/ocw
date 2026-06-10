@@ -277,10 +277,14 @@ type Printer struct {
 // NewPrinter creates a new Printer.
 // If jsonMode is true, all output is emitted as NDJSON events to stdout.
 // secrets are values that will be masked in output (unless showSecrets is true).
-func NewPrinter(jsonMode, showSecrets bool, secrets []string) *Printer {
+// If stdout is nil, os.Stdout is used.
+func NewPrinter(stdout io.Writer, jsonMode, showSecrets bool, secrets []string) *Printer {
+	if stdout == nil {
+		stdout = os.Stdout
+	}
 	return &Printer{
 		styles:      NewStyles(),
-		stdout:      os.Stdout,
+		stdout:      stdout,
 		secrets:     secrets,
 		showSecrets: showSecrets,
 		jsonMode:    jsonMode,

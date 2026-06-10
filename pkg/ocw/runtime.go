@@ -31,4 +31,6 @@ type Runtime interface {
 	HasActiveServices() bool
 	// ListServices returns information about all active background services.
 	ListServices() []ServiceInfo
+	// Close cleans up any resources created by the runtime.
+	Close() error
 }

@@ -109,7 +109,7 @@ func (o *OCW) Validate() error {
 	if len(o.Sequence) > 0 {
 		flowTypes++
 	}
-	if o.Switch != nil {
+	if o.Switch != "" {
 		flowTypes++
 	}
 
@@ -155,7 +155,7 @@ func (o *OCW) Validate() error {
 			v.merge(sv)
 		}
 	}
-	if o.Switch != nil {
+	if o.Switch != "" {
 		v.validateSwitchFlow(o.Switch, o.Case, o.Default)
 	}
 
@@ -171,7 +171,7 @@ func (v *validator) validateJob(job *Job) {
 	if len(job.Sequence) > 0 {
 		flowTypes++
 	}
-	if job.Switch != nil {
+	if job.Switch != "" {
 		flowTypes++
 	}
 	if job.Step != nil {
@@ -199,7 +199,7 @@ func (v *validator) validateJob(job *Job) {
 			v.merge(sv)
 		}
 	}
-	if job.Switch != nil {
+	if job.Switch != "" {
 		v.validateSwitchFlow(job.Switch, job.Case, job.Default)
 	}
 	if job.Step != nil {
@@ -369,8 +369,8 @@ func (v *validator) validateSwitchStep(step *SwitchStep) {
 	}
 }
 
-func (v *validator) validateSwitchFlow(switchExpr *string, cases map[string]Step, defaultCase *Step) {
-	if switchExpr == nil || *switchExpr == "" {
+func (v *validator) validateSwitchFlow(switchExpr string, cases map[string]Step, defaultCase *Step) {
+	if switchExpr == "" {
 		v.withPath("switch").addError("is required")
 	}
 

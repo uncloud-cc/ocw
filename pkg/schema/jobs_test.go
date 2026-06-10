@@ -33,7 +33,7 @@ func TestJob_GetFlowType(t *testing.T) {
 		{
 			name: "switch flow",
 			job: &Job{
-				Switch: stringPtr("{{ env.MODE }}"),
+				Switch: "{{ env.MODE }}",
 			},
 			expected: "switch",
 		},

@@ -841,8 +841,8 @@ func compileSwitchStep(s *schema.SwitchStep, exec Runtime, state *State, printer
 }
 
 func compileJobSwitch(job *schema.Job, exec Runtime, state *State, printer *Printer, baseDir string, fetcher *Fetcher) (flow.Steper, error) {
-	if job.Switch == nil {
-		return nil, fmt.Errorf("switch expression is nil")
+	if job.Switch == "" {
+		return nil, fmt.Errorf("switch expression is empty")
 	}
 	cases := make(map[string]flow.Steper)
 	for caseValue, caseStepSchema := range job.Case {
@@ -862,17 +862,17 @@ func compileJobSwitch(job *schema.Job, exec Runtime, state *State, printer *Prin
 		def = compiled
 	}
 
-	return &switchStep{
-		evalExpr: *job.Switch,
-		cases:    cases,
-		def:      def,
-		state:    state,
-	}, nil
+		return &switchStep{
+			evalExpr: job.Switch,
+			cases:    cases,
+			def:      def,
+			state:    state,
+		}, nil
 }
 
 func compileOCWSwitch(ocw *schema.OCW, exec Runtime, state *State, printer *Printer, baseDir string, fetcher *Fetcher) (flow.Steper, error) {
-	if ocw.Switch == nil {
-		return nil, fmt.Errorf("switch expression is nil")
+	if ocw.Switch == "" {
+		return nil, fmt.Errorf("switch expression is empty")
 	}
 	cases := make(map[string]flow.Steper)
 	for caseValue, caseStepSchema := range ocw.Case {
@@ -892,12 +892,12 @@ func compileOCWSwitch(ocw *schema.OCW, exec Runtime, state *State, printer *Prin
 		def = compiled
 	}
 
-	return &switchStep{
-		evalExpr: *ocw.Switch,
-		cases:    cases,
-		def:      def,
-		state:    state,
-	}, nil
+		return &switchStep{
+			evalExpr: ocw.Switch,
+			cases:    cases,
+			def:      def,
+			state:    state,
+		}, nil
 }
 
 // workflowStep wraps a compiled nested workflow as a single go-workflow Steper.

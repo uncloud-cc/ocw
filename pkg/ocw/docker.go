@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	gonanoid "github.com/matoous/go-nanoid"
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
@@ -80,7 +81,11 @@ func NewDockerRuntime(volumes schema.Volumes, workflowDir string, printer *Print
 	}
 
 	if runID == "" {
-		runID = NewRunID(12)
+		var err error
+		runID, err = gonanoid.Generate(NanoidAlphabet, 12)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create runID: %w", err)
+		}
 	}
 
 	networkName := "ocw-" + runID

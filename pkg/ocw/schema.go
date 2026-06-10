@@ -12,7 +12,7 @@ func GetFlowType(ocw *schema.OCW) string {
 	if len(ocw.Sequence) > 0 {
 		return "sequence"
 	}
-	if ocw.Switch != nil {
+	if ocw.Switch != "" {
 		return "switch"
 	}
 	return ""
@@ -71,7 +71,7 @@ func GetJobFlowType(job *schema.Job) string {
 	if len(job.Sequence) > 0 {
 		return "sequence"
 	}
-	if job.Switch != nil {
+	if job.Switch != "" {
 		return "switch"
 	}
 	if job.Step != nil {
@@ -90,67 +90,6 @@ func GetJobSteps(job *schema.Job) []schema.Step {
 	}
 	if job.Step != nil {
 		return []schema.Step{*job.Step}
-	}
-	return nil
-}
-
-// WatchIsEnabled returns true if watch mode is enabled
-func WatchIsEnabled(w *schema.Watch) bool {
-	if w == nil {
-		return false
-	}
-	if w.Bool != nil {
-		return *w.Bool
-	}
-	// Any other variant means watch is enabled
-	return w.String != nil || w.Strings != nil || w.Config != nil
-}
-
-// WatchGetFiles returns the glob patterns to watch
-func WatchGetFiles(w *schema.Watch) []string {
-	if w == nil {
-		return nil
-	}
-	if w.String != nil {
-		return []string{*w.String}
-	}
-	if w.Strings != nil {
-		return w.Strings
-	}
-	if w.Config != nil {
-		return w.Config.Files
-	}
-	return nil
-}
-
-// WatchGetMode returns the watch mode (defaults to rebuild-reload)
-func WatchGetMode(w *schema.Watch) schema.WatchMode {
-	if w != nil && w.Config != nil && w.Config.Mode != "" {
-		return w.Config.Mode
-	}
-	return schema.WatchModeRebuildReload
-}
-
-// WatchShouldUseGitIgnore returns whether to respect .gitignore (default: true)
-func WatchShouldUseGitIgnore(w *schema.Watch) bool {
-	if w != nil && w.Config != nil && w.Config.UseGitIgnore != nil {
-		return *w.Config.UseGitIgnore
-	}
-	return true
-}
-
-// WatchShouldUseDockerIgnore returns whether to respect .dockerignore (default: true)
-func WatchShouldUseDockerIgnore(w *schema.Watch) bool {
-	if w != nil && w.Config != nil && w.Config.UseDockerIgnore != nil {
-		return *w.Config.UseDockerIgnore
-	}
-	return true
-}
-
-// WatchGetIgnorePatterns returns additional ignore patterns
-func WatchGetIgnorePatterns(w *schema.Watch) []string {
-	if w != nil && w.Config != nil {
-		return w.Config.Ignore
 	}
 	return nil
 }

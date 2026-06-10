@@ -13,7 +13,7 @@ import (
 func TestCompileWorkflowStep_Local(t *testing.T) {
 	tmpDir := t.TempDir()
 	fetcher := NewFetcherWithDir(tmpDir)
-	printer := NewPrinter(false, false, nil)
+	printer := NewPrinter(nil, false, false, nil)
 	state := &State{
 		Meta:    map[string]string{},
 		Inputs:  map[string]string{"foo": "bar"},
@@ -51,7 +51,7 @@ sequence:
 func TestCompileWorkflowStep_InheritanceNone(t *testing.T) {
 	tmpDir := t.TempDir()
 	fetcher := NewFetcherWithDir(tmpDir)
-	printer := NewPrinter(false, false, nil)
+	printer := NewPrinter(nil, false, false, nil)
 	state := &State{
 		Meta:    map[string]string{},
 		Inputs:  map[string]string{"foo": "bar"},
@@ -89,7 +89,7 @@ sequence:
 func TestCompileWorkflowStep_InheritanceAll(t *testing.T) {
 	tmpDir := t.TempDir()
 	fetcher := NewFetcherWithDir(tmpDir)
-	printer := NewPrinter(false, false, nil)
+	printer := NewPrinter(nil, false, false, nil)
 	state := &State{
 		Meta:    map[string]string{},
 		Inputs:  map[string]string{"foo": "bar"},
@@ -127,7 +127,7 @@ sequence:
 func TestCompileWorkflowStep_ExplicitEnv(t *testing.T) {
 	tmpDir := t.TempDir()
 	fetcher := NewFetcherWithDir(tmpDir)
-	printer := NewPrinter(false, false, nil)
+	printer := NewPrinter(nil, false, false, nil)
 	state := &State{
 		Meta:    map[string]string{},
 		Inputs:  map[string]string{"foo": "bar"},
@@ -164,7 +164,7 @@ sequence:
 func TestCompileWorkflowStep_MissingFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	fetcher := NewFetcherWithDir(tmpDir)
-	printer := NewPrinter(false, false, nil)
+	printer := NewPrinter(nil, false, false, nil)
 	state := &State{
 		Meta:    map[string]string{},
 		Inputs:  map[string]string{},

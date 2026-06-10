@@ -154,3 +154,22 @@ func (s Step) MarshalYAML() (interface{}, error) {
 	}
 	return nil, nil
 }
+
+// StepTypeInfo holds metadata for a step type that participates in the
+// discriminated union. It is used by schema generators to auto-register
+// all step definitions.
+type StepTypeInfo struct {
+	Name string
+	Type any
+}
+
+// StepTypes is the registry of all step types that appear in the Step
+// discriminated union. When adding a new step type, register it here.
+var StepTypes = []StepTypeInfo{
+	{Name: "RunStep", Type: RunStep{}},
+	{Name: "BuildStep", Type: BuildStep{}},
+	{Name: "ParallelStep", Type: ParallelStep{}},
+	{Name: "SequenceStep", Type: SequenceStep{}},
+	{Name: "WorkflowStep", Type: WorkflowStep{}},
+	{Name: "SwitchStep", Type: SwitchStep{}},
+}
