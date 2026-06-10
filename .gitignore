@@ -18,3 +18,14 @@ dist/
 coverage.html
 coverage.xml
 *.coverage
+
+# Hugo build artifacts
+.hugo_build.lock
+public/
+resources/
+
+# Node.js dependencies (for docs PostCSS)
+node_modules/
+package-lock.json
+/package.json
+!/docs/package.json

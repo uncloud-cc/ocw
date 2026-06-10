@@ -1,0 +1,32 @@
+name: OCW Documentation
+
+jobs:
+  # Development server with hot reload
+  # Run 'ocw dev' then open http://localhost:1313 in your browser
+  dev:
+    name: Docs development server
+    sequence:
+      - name: Hugo dev server
+        id: dev
+        image: hugomods/hugo:latest
+        cmd: hugo server --bind 0.0.0.0 --port 1313 --watch --minify
+        background: true
+        # Expose port 1313 for browser access
+        expose: 1313
+
+  # Build the static site
+  build:
+    name: Build docs site
+    sequence:
+      - name: Build Hugo site
+        image: hugomods/hugo:latest
+        cmd: hugo --minify
+        # Output goes to /workflow/public (Hugo default)
+
+  # Clean build artifacts
+  clean:
+    volumes: site
+    image: alpine
+    cmd: |
+      rm -rf /workflow/public /workflow/resources /workflow/.hugo_build.lock
+      echo "Cleaned build artifacts"
