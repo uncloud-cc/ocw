@@ -12,6 +12,8 @@ Comprehensive rewrite of the first version of ocw.
 - [x] Implement imported workflows
 - [x] Implement volume mounts
 - [x] Remove `sandbox`
+- [ ] **Clean the fuck up** -> Build the `eventbus` into everything, thereby cleaning up the code to rid it of any gross AI slop for the first version
+
 - [ ] Implement Github Action
 - [ ] Finish injecting `bus.debug()` statements everywhere (making debugging trivial)
 - [ ] Finish migrating `printer.go` to just consume events
