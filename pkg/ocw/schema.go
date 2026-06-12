@@ -62,34 +62,3 @@ func GetSteps(ocw *schema.OCW) []schema.Step {
 	}
 	return nil
 }
-
-// GetJobFlowType returns the flow control type used in this job
-func GetJobFlowType(job *schema.Job) string {
-	if len(job.Parallel) > 0 {
-		return "parallel"
-	}
-	if len(job.Sequence) > 0 {
-		return "sequence"
-	}
-	if job.Switch != "" {
-		return "switch"
-	}
-	if job.Step != nil {
-		return "step"
-	}
-	return ""
-}
-
-// GetJobSteps returns all top-level steps regardless of flow type
-func GetJobSteps(job *schema.Job) []schema.Step {
-	if len(job.Parallel) > 0 {
-		return job.Parallel
-	}
-	if len(job.Sequence) > 0 {
-		return job.Sequence
-	}
-	if job.Step != nil {
-		return []schema.Step{*job.Step}
-	}
-	return nil
-}

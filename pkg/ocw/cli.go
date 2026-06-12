@@ -104,7 +104,7 @@ func (c *CLI) Run(ctx context.Context, args []string) error {
 	ctx, cancel := c.withSignalHandling(ctx)
 	defer cancel()
 
-	workflow, displayName, job, err := c.compileWorkflow(parsed, jobName, filePath, exec, state, printer, workflowDir)
+	workflow, displayName, job, err := c.compileWorkflow(parsed, jobName, filePath, exec, state, bus, workflowDir)
 	if err != nil {
 		return err
 	}
@@ -315,10 +315,9 @@ func (c *CLI) withSignalHandling(ctx context.Context) (context.Context, context.
 }
 
 // compileWorkflow turns the parsed schema into an executable workflow.
-func (c *CLI) compileWorkflow(parsed *schema.OCW, jobName, filePath string, exec Runtime, state *State, printer *Printer, workflowDir string) (*flow.Workflow, string, *schema.Job, error) {
-	var workflow *flow.Workflow
+// compileWorkflow turns the parsed schema into an executable workflow.
+func (c *CLI) compileWorkflow(parsed *schema.OCW, jobName, filePath string, exec Runtime, state *State, bus *EventBus, workflowDir string) (*flow.Workflow, string, *schema.Job, error) {
 	var job *schema.Job
-	var err error
 	displayName := parsed.Name
 
 	if jobName != "" {
@@ -332,16 +331,16 @@ func (c *CLI) compileWorkflow(parsed *schema.OCW, jobName, filePath string, exec
 		} else {
 			displayName = jobName
 		}
-		workflow, err = CompileJob(job, exec, state, printer, workflowDir)
 	} else {
-		if HasDirectFlow(parsed) {
-			workflow, err = CompileOCW(parsed, exec, state, printer, workflowDir)
-		} else if HasJobs(parsed) {
-			return nil, "", nil, c.listJobsInFile(filePath, parsed)
-		} else {
+		if !HasDirectFlow(parsed) {
+			if HasJobs(parsed) {
+				return nil, "", nil, c.listJobsInFile(filePath, parsed)
+			}
 			return nil, "", nil, fmt.Errorf("no workflow flow or jobs found in %s", filePath)
 		}
 	}
+
+	workflow, err := Compile(parsed, jobName, exec, state, bus, workflowDir)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("compile: %w", err)
 	}

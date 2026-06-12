@@ -124,6 +124,7 @@ func (s *State) InterpolateTemplate(input string) (string, error) {
 				return ""
 			}
 			return value
+
 		case "inputs":
 			key := parts[1]
 			value, exists := s.Inputs[key]
@@ -132,6 +133,7 @@ func (s *State) InterpolateTemplate(input string) (string, error) {
 				return ""
 			}
 			return value
+
 		case "secrets":
 			key := parts[1]
 			value, exists := s.Secrets[key]
@@ -140,6 +142,7 @@ func (s *State) InterpolateTemplate(input string) (string, error) {
 				return ""
 			}
 			return value
+
 		case "steps":
 			if len(parts) < 3 {
 				err = fmt.Errorf("Step output references in templates need three parts: {{ steps.<stepId>.<key> }} (e.g. {{ steps.build.image }})")
@@ -160,6 +163,7 @@ func (s *State) InterpolateTemplate(input string) (string, error) {
 				return ""
 			}
 			return value
+
 		case "env":
 			key := parts[1]
 			value, exists := s.Env[key]
