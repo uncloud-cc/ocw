@@ -127,3 +127,15 @@ type HealthCheckComplete struct {
 }
 
 func (HealthCheckComplete) EventType() string { return EventHealthCheckComplete }
+
+type ServicesOverview struct {
+	Services []ServiceInfo `json:"services"`
+}
+
+func (ServicesOverview) EventType() string { return EventServicesOverview }
+
+type Waiting struct {
+	Message string `json:"message"`
+}
+
+func (Waiting) EventType() string { return EventWaiting }

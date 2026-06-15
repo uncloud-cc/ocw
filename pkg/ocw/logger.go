@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 )
 
 // JSONLogger consumes events from a channel and writes them as NDJSON lines.
@@ -49,8 +50,8 @@ func (p *PrettyPrinter) Run(ch <-chan IngestedEvent) {
 		case *WorkflowStart:
 			fmt.Fprint(p.out, p.styles.JobBox(e.Name, e.Directory, e.LoadedFiles))
 		case *WorkflowComplete:
-			d := fmt.Sprintf("%dms", e.DurationMs)
-			fmt.Fprint(p.out, p.styles.CompletionBanner(e.Name, d, e.Success))
+			d := time.Duration(e.DurationMs) * time.Millisecond
+			fmt.Fprint(p.out, p.styles.CompletionBanner(e.Name, d.Round(time.Millisecond).String(), e.Success))
 		case *GroupHeader:
 			fmt.Fprint(p.out, p.styles.SectionHeader(e.Text))
 		case *StepStart:
@@ -65,6 +66,20 @@ func (p *PrettyPrinter) Run(ch <-chan IngestedEvent) {
 			}
 		case *WorkflowOutputs:
 			fmt.Fprint(p.out, p.styles.OutputsBox(e.Title, e.Outputs))
+		case *HealthCheckStart:
+			fmt.Fprint(p.out, p.styles.Dim("→ ")+p.styles.Info("Waiting for "+e.Name+" to become healthy")+p.styles.Dim("...")+"\n")
+		case *HealthCheckComplete:
+			if e.Success {
+				d := time.Duration(e.DurationMs) * time.Millisecond
+				fmt.Fprint(p.out, p.styles.Success("✓ healthy")+" "+p.styles.Dim("("+d.Round(time.Millisecond).String()+")")+"\n")
+			} else {
+				fmt.Fprint(p.out, p.styles.Error("✗ failed")+"\n")
+			}
+		case *ServicesOverview:
+			fmt.Fprint(p.out, p.styles.ServicesBox(e.Services))
+		case *Waiting:
+			fmt.Fprint(p.out, p.styles.Dim("\nPress Ctrl+C to stop\n\n"))
 		}
+		// LogDebug/LogInfo/LogWarn/LogError are intentionally ignored in pretty mode
 	}
 }

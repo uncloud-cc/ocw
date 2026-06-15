@@ -280,6 +280,43 @@ func TestState_SetStepOutputs(t *testing.T) {
 	}
 }
 
+func TestState_GetSecretValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		secrets  map[string]string
+		expected []string
+	}{
+		{
+			name:     "list should be empty if secrets are empty",
+			secrets:  map[string]string{},
+			expected: []string{},
+		},
+		{
+			name: "list contains the values of the secrets",
+			secrets: map[string]string{
+				"API_KEY":  "123456",
+				"PASSWORD": "givemeaccess",
+			},
+			expected: []string{
+				"123456",
+				"givemeaccess",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &State{
+				Secrets: tt.secrets,
+			}
+			actual := state.GetSecretValues()
+			if !reflect.DeepEqual(actual, tt.expected) {
+				t.Errorf("expected %v, instead go %v", tt.expected, actual)
+			}
+		})
+	}
+}
+
 func TestState_Clone(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -721,4 +758,3 @@ func TestResolveOutputs(t *testing.T) {
 		})
 	}
 }
-

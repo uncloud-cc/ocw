@@ -8,11 +8,14 @@ import (
 	"strings"
 	"sync"
 
+	gonanoid "github.com/matoous/go-nanoid"
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
 // State stores the state of the workflow
 type State struct {
+	// RunID is a unique identifier for this workflow run.
+	RunID string
 	// Meta stores some meta information about the workflow (e.g. job name)
 	Meta map[string]string
 	// Inputs stores the input variables declared in the "inputs" section
@@ -32,8 +35,15 @@ type State struct {
 // NewState initializes a State from inputs, environment variables,
 // and an optional JSON input file. Environment variables are snapshotted
 // into state.Env so {{ env.KEY }} templates are isolated per workflow.
+// A RunID is automatically generated for each new State.
 func NewState(inputConfig *schema.Inputs, inputFile string) (*State, error) {
+	runID, err := gonanoid.Generate(NanoidAlphabet, 12)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create runID: %w", err)
+	}
+
 	state := &State{
+		RunID:   runID,
 		Meta:    make(map[string]string),
 		Inputs:  make(map[string]string),
 		Secrets: make(map[string]string),
@@ -209,12 +219,22 @@ func (s *State) SetStepOutputs(stepID string, outputs map[string]string) {
 	}
 }
 
+func (s *State) GetSecretValues() []string {
+	secretValues := []string{}
+	for _, secretValue := range s.Secrets {
+		secretValues = append(secretValues, secretValue)
+	}
+
+	return secretValues
+}
+
 // Clone returns a deep copy of the state safe for independent mutation.
 func (s *State) Clone() *State {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	cloned := &State{
+		RunID:   s.RunID,
 		Meta:    make(map[string]string, len(s.Meta)),
 		Inputs:  make(map[string]string, len(s.Inputs)),
 		Secrets: make(map[string]string, len(s.Secrets)),

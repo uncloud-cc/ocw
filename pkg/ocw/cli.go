@@ -15,7 +15,6 @@ import (
 
 	flow "github.com/Azure/go-workflow"
 	"github.com/joho/godotenv"
-	gonanoid "github.com/matoous/go-nanoid"
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
@@ -88,14 +87,13 @@ func (c *CLI) Run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	state, runID, secretValues, err := c.buildState(parsed, loadedFiles)
+	state, secretValues, err := c.buildState(parsed, loadedFiles)
 	if err != nil {
 		return err
 	}
+	bus.SetSecrets(c.opts.ShowSecrets, secretValues)
 
-	printer := c.createPrinter(secretValues)
-
-	exec, ciMode, err := c.buildRuntime(parsed, workflowDir, printer, runID)
+	exec, ciMode, err := c.buildRuntime(parsed, workflowDir, state.RunID)
 	if err != nil {
 		return err
 	}
@@ -109,19 +107,17 @@ func (c *CLI) Run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	runErr, duration := c.executeWorkflow(ctx, workflow, displayName, filePath, jobName, workflowDir, loadedFiles, printer)
+	runErr, _ := c.executeWorkflow(ctx, workflow, displayName, filePath, jobName, workflowDir, loadedFiles, bus)
 
 	rawOutputs := c.selectRawOutputs(parsed, jobName, job)
 	if runErr == nil && len(rawOutputs) > 0 {
-		if err := c.resolveAndWriteOutputs(state, rawOutputs, printer); err != nil {
+		if err := c.resolveAndWriteOutputs(state, rawOutputs, bus); err != nil {
 			return err
 		}
 	}
 
-	c.emitWorkflowComplete(displayName, duration, runErr, printer)
-
 	if runErr == nil {
-		c.waitForServices(ctx, exec, ciMode, printer)
+		c.waitForServices(ctx, exec, ciMode, bus)
 	}
 
 	if runErr != nil {
@@ -247,19 +243,13 @@ func (c *CLI) loadEnvFiles(workflowDir string) ([]string, error) {
 }
 
 // buildState creates the workflow state from parsed inputs and environment.
-func (c *CLI) buildState(parsed *schema.OCW, loadedFiles []string) (*State, string, []string, error) {
+func (c *CLI) buildState(parsed *schema.OCW, loadedFiles []string) (*State, []string, error) {
 	state, err := NewState(&parsed.Inputs, c.opts.InputsFile)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("inputs: %w", err)
+		return nil, nil, fmt.Errorf("inputs: %w", err)
 	}
 	state.Meta["name"] = parsed.Name
 	state.Steps = make(map[string]map[string]string)
-
-	runID, err := gonanoid.Generate(NanoidAlphabet, 12)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("cannot create runID: %w", err)
-	}
-	state.Meta["runID"] = runID
 
 	if c.opts.InputsFile != "" {
 		loadedFiles = append(loadedFiles, c.opts.InputsFile)
@@ -270,22 +260,17 @@ func (c *CLI) buildState(parsed *schema.OCW, loadedFiles []string) (*State, stri
 		secretValues = append(secretValues, v)
 	}
 
-	return state, runID, secretValues, nil
-}
-
-// createPrinter builds the output printer for the run.
-func (c *CLI) createPrinter(secretValues []string) *Printer {
-	return NewPrinter(c.opts.Stdout, c.opts.JSONMode, c.opts.ShowSecrets, secretValues)
+	return state, secretValues, nil
 }
 
 // buildRuntime creates the execution runtime (Docker by default) and detects CI mode.
-func (c *CLI) buildRuntime(parsed *schema.OCW, workflowDir string, printer *Printer, runID string) (Runtime, bool, error) {
+func (c *CLI) buildRuntime(parsed *schema.OCW, workflowDir string, runID string) (Runtime, bool, error) {
 	var exec Runtime
 	if c.opts.Runtime != nil {
 		exec = c.opts.Runtime
 	} else {
 		var err error
-		exec, err = NewDockerRuntime(parsed.Volumes, workflowDir, printer, runID)
+		exec, err = NewDockerRuntime(parsed.Volumes, workflowDir, runID)
 		if err != nil {
 			return nil, false, fmt.Errorf("runtime: %w", err)
 		}
@@ -349,17 +334,20 @@ func (c *CLI) compileWorkflow(parsed *schema.OCW, jobName, filePath string, exec
 }
 
 // executeWorkflow runs the compiled workflow and returns any error and duration.
-func (c *CLI) executeWorkflow(ctx context.Context, workflow *flow.Workflow, displayName, filePath, jobName, workflowDir string, loadedFiles []string, printer *Printer) (error, time.Duration) {
-	printer.Info("workflow_start", map[string]any{
-		"name": displayName,
-		"file": filePath,
-		"job":  jobName,
+func (c *CLI) executeWorkflow(ctx context.Context, workflow *flow.Workflow, displayName, filePath, jobName, workflowDir string, loadedFiles []string, bus *EventBus) (error, time.Duration) {
+	bus.Event(&WorkflowStart{
+		Name:        displayName,
+		Directory:   workflowDir,
+		LoadedFiles: loadedFiles,
 	})
-	printer.PrintJobStart(displayName, workflowDir, loadedFiles)
 	start := time.Now()
 	err := workflow.Do(ctx)
 	duration := time.Since(start)
-	printer.PrintCompletionBanner(displayName, duration, err == nil)
+	bus.Event(&WorkflowComplete{
+		Name:       displayName,
+		Success:    err == nil,
+		DurationMs: duration.Milliseconds(),
+	})
 	return err, duration
 }
 
@@ -372,12 +360,15 @@ func (c *CLI) selectRawOutputs(parsed *schema.OCW, jobName string, job *schema.J
 }
 
 // resolveAndWriteOutputs resolves template expressions and optionally writes to disk.
-func (c *CLI) resolveAndWriteOutputs(state *State, rawOutputs map[string]string, printer *Printer) error {
+func (c *CLI) resolveAndWriteOutputs(state *State, rawOutputs map[string]string, bus *EventBus) error {
 	resolved, err := state.ResolveOutputs(rawOutputs)
 	if err != nil {
 		return fmt.Errorf("resolve outputs: %w", err)
 	}
-	printer.PrintOutputs("Outputs", resolved)
+	bus.Event(&WorkflowOutputs{
+		Title:   "Outputs",
+		Outputs: resolved,
+	})
 
 	if c.opts.OutputsFile != "" {
 		data, err := json.MarshalIndent(resolved, "", "  ")
@@ -391,30 +382,12 @@ func (c *CLI) resolveAndWriteOutputs(state *State, rawOutputs map[string]string,
 	return nil
 }
 
-// emitWorkflowComplete logs the final success or failure event.
-func (c *CLI) emitWorkflowComplete(displayName string, duration time.Duration, runErr error, printer *Printer) {
-	if runErr != nil {
-		printer.Error("workflow_complete", map[string]any{
-			"name":        displayName,
-			"duration_ms": duration.Milliseconds(),
-			"success":     false,
-			"error":       runErr.Error(),
-		})
-	} else {
-		printer.Info("workflow_complete", map[string]any{
-			"name":        displayName,
-			"duration_ms": duration.Milliseconds(),
-			"success":     true,
-		})
-	}
-}
-
 // waitForServices shows active background services and blocks in interactive mode.
-func (c *CLI) waitForServices(ctx context.Context, exec Runtime, ciMode bool, printer *Printer) {
+func (c *CLI) waitForServices(ctx context.Context, exec Runtime, ciMode bool, bus *EventBus) {
 	if exec.HasActiveServices() {
-		printer.PrintServicesOverview(exec.ListServices())
+		bus.Event(&ServicesOverview{Services: exec.ListServices()})
 		if !ciMode {
-			printer.PrintWaitingMessage()
+			bus.Event(&Waiting{Message: "Press Ctrl+C to stop"})
 			<-ctx.Done()
 		}
 	}

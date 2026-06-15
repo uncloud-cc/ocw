@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuildRunArgs(t *testing.T) {
-	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet", printer: NewPrinter(nil, false, false, nil)}
+	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet"}
 	step := &schema.RunStep{
 		StepBase: schema.StepBase{Env: map[string]string{"FOO": "bar"}},
 		Image:    "alpine",
@@ -33,7 +33,7 @@ func TestBuildRunArgs(t *testing.T) {
 }
 
 func TestBuildServiceArgs_Basic(t *testing.T) {
-	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet", printer: NewPrinter(nil, false, false, nil)}
+	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet"}
 	step := &schema.RunStep{
 		Image:      "node:25-alpine",
 		Cmd:        "npx serve",
@@ -52,7 +52,7 @@ func TestBuildServiceArgs_Basic(t *testing.T) {
 }
 
 func TestBuildServiceArgs_WithExpose(t *testing.T) {
-	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet", printer: NewPrinter(nil, false, false, nil)}
+	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet"}
 	step := &schema.RunStep{
 		Image:      "node:25-alpine",
 		Background: true,
@@ -76,7 +76,7 @@ func TestBuildServiceArgs_WithExpose(t *testing.T) {
 }
 
 func TestBuildServiceArgs_WithHealthCheck(t *testing.T) {
-	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet", printer: NewPrinter(nil, false, false, nil)}
+	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet"}
 	step := &schema.RunStep{
 		Image:      "node:25-alpine",
 		Background: true,
@@ -104,7 +104,7 @@ func TestBuildServiceArgs_WithHealthCheck(t *testing.T) {
 }
 
 func TestBuildServiceArgs_Full(t *testing.T) {
-	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet", printer: NewPrinter(nil, false, false, nil)}
+	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet"}
 	step := &schema.RunStep{
 		StepBase:   schema.StepBase{ID: "web", Env: map[string]string{"NODE_ENV": "production"}},
 		Image:      "node:25-alpine",
@@ -142,7 +142,7 @@ func TestBuildServiceArgs_Full(t *testing.T) {
 }
 
 func TestBuildServiceArgs_HealthCheckDefaults(t *testing.T) {
-	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet", printer: NewPrinter(nil, false, false, nil)}
+	d := &DockerRuntime{workflowDir: "/tmp/wf", networkName: "ocw-testnet"}
 	step := &schema.RunStep{
 		Image:      "node:25-alpine",
 		Background: true,
@@ -172,7 +172,6 @@ func TestBuildVolumeMount(t *testing.T) {
 			"site":    {Path: "./website/site", Mode: schema.VolumeModeReadWrite, MountPath: "/src/site"},
 			"secrets": {Path: "/home/user/.aws", Mode: schema.VolumeModeReadOnly},
 		},
-		printer: NewPrinter(nil, false, false, nil),
 	}
 
 	cases := []struct {

@@ -14,18 +14,63 @@ import (
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
 
-// linePrefixWriter buffers writes and emits each complete line through the printer.
-// In pretty mode it formats with prefix + colored separator.
-// In JSON mode it emits container.output events.
+type DockerRuntime struct {
+	volumes              schema.Volumes
+	workflowDir          string
+	backgroundContainers []string
+	services             []ServiceInfo
+	networkName          string
+	logCtx               context.Context
+	logCancel            context.CancelFunc
+	logWg                sync.WaitGroup
+	mu                   sync.Mutex
+}
+
+func NewDockerRuntime(volumes schema.Volumes, workflowDir string, runID string) (*DockerRuntime, error) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return nil, fmt.Errorf("docker CLI not found in PATH")
+	}
+	if err := exec.Command("docker", "version").Run(); err != nil {
+		return nil, fmt.Errorf("docker daemon unreachable: %w", err)
+	}
+
+	if runID == "" {
+		var err error
+		runID, err = gonanoid.Generate(NanoidAlphabet, 12)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create runID: %w", err)
+		}
+	}
+
+	networkName := "ocw-" + runID
+	if err := exec.Command("docker", "network", "create", networkName).Run(); err != nil {
+		return nil, fmt.Errorf("failed to create docker network %s: %w", networkName, err)
+	}
+
+	logCtx, logCancel := context.WithCancel(context.Background())
+	return &DockerRuntime{
+		volumes:     volumes,
+		workflowDir: workflowDir,
+		networkName: networkName,
+		logCtx:      logCtx,
+		logCancel:   logCancel,
+	}, nil
+}
+
+// linePrefixWriter buffers writes and emits each complete line as a ContainerOutput event.
 type linePrefixWriter struct {
-	printer *Printer
-	prefix  string // step name/ID
-	stream  string // "stdout" or "stderr"
-	buf     []byte
+	bus    *EventBus
+	prefix string // step name/ID
+	stream string // "stdout" or "stderr"
+	buf    []byte
 }
 
 func (w *linePrefixWriter) emit(line string) {
-	w.printer.PrintContainerOutput(w.prefix, w.stream, line)
+	w.bus.Event(&ContainerOutput{
+		Step:   w.prefix,
+		Stream: w.stream,
+		Line:   line,
+	})
 }
 
 func (w *linePrefixWriter) Write(p []byte) (int, error) {
@@ -57,51 +102,6 @@ func (w *linePrefixWriter) Flush() {
 		w.emit(string(w.buf))
 		w.buf = nil
 	}
-}
-
-type DockerRuntime struct {
-	volumes              schema.Volumes
-	workflowDir          string
-	printer              *Printer
-	backgroundContainers []string
-	services             []ServiceInfo
-	networkName          string
-	logCtx               context.Context
-	logCancel            context.CancelFunc
-	logWg                sync.WaitGroup
-	mu                   sync.Mutex
-}
-
-func NewDockerRuntime(volumes schema.Volumes, workflowDir string, printer *Printer, runID string) (*DockerRuntime, error) {
-	if _, err := exec.LookPath("docker"); err != nil {
-		return nil, fmt.Errorf("docker CLI not found in PATH")
-	}
-	if err := exec.Command("docker", "version").Run(); err != nil {
-		return nil, fmt.Errorf("docker daemon unreachable: %w", err)
-	}
-
-	if runID == "" {
-		var err error
-		runID, err = gonanoid.Generate(NanoidAlphabet, 12)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create runID: %w", err)
-		}
-	}
-
-	networkName := "ocw-" + runID
-	if err := exec.Command("docker", "network", "create", networkName).Run(); err != nil {
-		return nil, fmt.Errorf("failed to create docker network %s: %w", networkName, err)
-	}
-
-	logCtx, logCancel := context.WithCancel(context.Background())
-	return &DockerRuntime{
-		volumes:     volumes,
-		workflowDir: workflowDir,
-		printer:     printer,
-		networkName: networkName,
-		logCtx:      logCtx,
-		logCancel:   logCancel,
-	}, nil
 }
 
 func (d *DockerRuntime) Close() error {
@@ -151,8 +151,8 @@ func (d *DockerRuntime) ListServices() []ServiceInfo {
 	return out
 }
 
-func (d *DockerRuntime) Run(ctx context.Context, step *schema.RunStep, prefix string) (map[string]string, error) {
-	d.printer.Debug("docker_run_start", map[string]any{
+func (d *DockerRuntime) Run(ctx context.Context, step *schema.RunStep, prefix string, bus *EventBus) (map[string]string, error) {
+	bus.DebugWithData("docker run start", map[string]any{
 		"image":  step.Image,
 		"cmd":    step.Cmd,
 		"prefix": prefix,
@@ -164,8 +164,8 @@ func (d *DockerRuntime) Run(ctx context.Context, step *schema.RunStep, prefix st
 	}
 	defer os.Remove(outputsFile)
 
-	if err := d.execDocker(ctx, "run", prefix, d.buildRunArgs(step, outputsFile)...); err != nil {
-		d.printer.Error("docker_run_failed", map[string]any{
+	if err := d.execDocker(ctx, "run", prefix, bus, d.buildRunArgs(step, outputsFile)...); err != nil {
+		bus.ErrorWithData("docker run failed", map[string]any{
 			"image": step.Image,
 			"error": err.Error(),
 		})
@@ -175,19 +175,19 @@ func (d *DockerRuntime) Run(ctx context.Context, step *schema.RunStep, prefix st
 	if err != nil {
 		return nil, err
 	}
-	d.printer.Debug("docker_run_complete", map[string]any{
+	bus.DebugWithData("docker run complete", map[string]any{
 		"image":   step.Image,
 		"outputs": len(outputs),
 	})
 	return outputs, nil
 }
 
-func (d *DockerRuntime) StartService(ctx context.Context, step *schema.RunStep, prefix string) (map[string]string, error) {
+func (d *DockerRuntime) StartService(ctx context.Context, step *schema.RunStep, prefix string, bus *EventBus) (map[string]string, error) {
 	if !step.Background {
 		return nil, fmt.Errorf("StartService called on a non-background step")
 	}
 
-	d.printer.Debug("docker_service_start", map[string]any{
+	bus.DebugWithData("docker service start", map[string]any{
 		"image":  step.Image,
 		"cmd":    step.Cmd,
 		"prefix": prefix,
@@ -195,7 +195,7 @@ func (d *DockerRuntime) StartService(ctx context.Context, step *schema.RunStep, 
 
 	args := d.buildServiceArgs(step)
 
-	d.printer.Debug("docker_exec", map[string]any{
+	bus.DebugWithData("docker exec", map[string]any{
 		"op":   "run",
 		"args": args,
 	})
@@ -204,7 +204,7 @@ func (d *DockerRuntime) StartService(ctx context.Context, step *schema.RunStep, 
 	out, err := cmd.Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
-			d.printer.Error("docker_service_failed", map[string]any{
+			bus.ErrorWithData("docker service failed", map[string]any{
 				"image": step.Image,
 				"error": string(ee.Stderr),
 			})
@@ -218,7 +218,7 @@ func (d *DockerRuntime) StartService(ctx context.Context, step *schema.RunStep, 
 	d.backgroundContainers = append(d.backgroundContainers, containerID)
 	d.mu.Unlock()
 
-	d.printer.Debug("docker_service_started", map[string]any{
+	bus.DebugWithData("docker service started", map[string]any{
 		"image":       step.Image,
 		"containerID": containerID,
 	})
@@ -254,11 +254,11 @@ func (d *DockerRuntime) StartService(ctx context.Context, step *schema.RunStep, 
 	d.logWg.Add(1)
 	go func() {
 		defer d.logWg.Done()
-		d.streamLogs(d.logCtx, containerID, logPrefix)
+		d.streamLogs(d.logCtx, containerID, logPrefix, bus)
 	}()
 
 	if step.HealthCheck != nil {
-		if err := d.waitForHealthy(ctx, name, containerID, step.HealthCheck); err != nil {
+		if err := d.waitForHealthy(ctx, name, containerID, step.HealthCheck, bus); err != nil {
 			d.stopAndRemove(containerID)
 			return nil, err
 		}
@@ -289,7 +289,7 @@ func (d *DockerRuntime) StartService(ctx context.Context, step *schema.RunStep, 
 	})
 	d.mu.Unlock()
 
-	d.printer.Debug("docker_service_ready", map[string]any{
+	bus.DebugWithData("docker service ready", map[string]any{
 		"image":       step.Image,
 		"containerID": containerID,
 	})
@@ -315,7 +315,7 @@ func (d *DockerRuntime) getHealthStatus(ctx context.Context, containerID string)
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (d *DockerRuntime) waitForHealthy(ctx context.Context, name, containerID string, hc *schema.HealthCheck) error {
+func (d *DockerRuntime) waitForHealthy(ctx context.Context, name, containerID string, hc *schema.HealthCheck, bus *EventBus) error {
 	// Snappy defaults — must stay in sync with buildServiceArgs.
 	interval := 500 * time.Millisecond
 	if hc.Interval != "" {
@@ -352,7 +352,7 @@ func (d *DockerRuntime) waitForHealthy(ctx context.Context, name, containerID st
 	ctx, cancel := context.WithTimeout(ctx, overallTimeout)
 	defer cancel()
 
-	d.printer.PrintHealthCheckStart(name)
+	bus.Event(&HealthCheckStart{Name: name})
 	start := time.Now()
 	attempt := 0
 
@@ -362,33 +362,53 @@ func (d *DockerRuntime) waitForHealthy(ctx context.Context, name, containerID st
 	for {
 		select {
 		case <-ctx.Done():
-			d.printer.PrintHealthCheckEnd(name, false, time.Since(start))
+			bus.Event(&HealthCheckComplete{
+				Name:       name,
+				Success:    false,
+				DurationMs: time.Since(start).Milliseconds(),
+			})
 			return fmt.Errorf("health check timed out after %v", overallTimeout)
 		case <-ticker.C:
 			attempt++
 			status, err := d.getHealthStatus(ctx, containerID)
 			if err != nil {
-				d.printer.PrintHealthCheckEnd(name, false, time.Since(start))
+				bus.Event(&HealthCheckComplete{
+					Name:       name,
+					Success:    false,
+					DurationMs: time.Since(start).Milliseconds(),
+				})
 				return fmt.Errorf("health check inspect failed: %w", err)
 			}
-			d.printer.PrintHealthCheckTick(name, attempt, status)
+			bus.Event(&HealthCheckProgress{
+				Name:    name,
+				Attempt: attempt,
+				Status:  status,
+			})
 			switch status {
 			case "healthy":
-				d.printer.PrintHealthCheckEnd(name, true, time.Since(start))
+				bus.Event(&HealthCheckComplete{
+					Name:       name,
+					Success:    true,
+					DurationMs: time.Since(start).Milliseconds(),
+				})
 				return nil
 			case "unhealthy":
-				d.printer.PrintHealthCheckEnd(name, false, time.Since(start))
+				bus.Event(&HealthCheckComplete{
+					Name:       name,
+					Success:    false,
+					DurationMs: time.Since(start).Milliseconds(),
+				})
 				return fmt.Errorf("container became unhealthy")
 			}
 		}
 	}
 }
 
-func (d *DockerRuntime) streamLogs(ctx context.Context, containerID, prefix string) {
+func (d *DockerRuntime) streamLogs(ctx context.Context, containerID, prefix string, bus *EventBus) {
 	args := []string{"logs", "-f", "--since", "0s", containerID}
 	cmd := exec.CommandContext(ctx, "docker", args...)
-	outWriter := &linePrefixWriter{printer: d.printer, prefix: prefix, stream: "stdout"}
-	errWriter := &linePrefixWriter{printer: d.printer, prefix: prefix, stream: "stderr"}
+	outWriter := &linePrefixWriter{bus: bus, prefix: prefix, stream: "stdout"}
+	errWriter := &linePrefixWriter{bus: bus, prefix: prefix, stream: "stderr"}
 	cmd.Stdout, cmd.Stderr = outWriter, errWriter
 	if err := cmd.Run(); err != nil {
 		// Container exited or was stopped — expected on shutdown.
@@ -416,8 +436,8 @@ func (d *DockerRuntime) stopAndRemove(containerID string) {
 	_ = cmd.Run()
 }
 
-func (d *DockerRuntime) Build(ctx context.Context, step *schema.BuildStep, prefix string) (map[string]string, error) {
-	d.printer.Debug("docker_build_start", map[string]any{
+func (d *DockerRuntime) Build(ctx context.Context, step *schema.BuildStep, prefix string, bus *EventBus) (map[string]string, error) {
+	bus.DebugWithData("docker build start", map[string]any{
 		"image":   step.Build.Image,
 		"context": step.Build.Context,
 		"prefix":  prefix,
@@ -439,8 +459,8 @@ func (d *DockerRuntime) Build(ctx context.Context, step *schema.BuildStep, prefi
 		args = append(args[:len(args)-1], "--iidfile", tmpPath, last)
 	}
 
-	if err := d.execDocker(ctx, "build", prefix, args...); err != nil {
-		d.printer.Error("docker_build_failed", map[string]any{
+	if err := d.execDocker(ctx, "build", prefix, bus, args...); err != nil {
+		bus.ErrorWithData("docker build failed", map[string]any{
 			"image": step.Build.Image,
 			"error": err.Error(),
 		})
@@ -454,7 +474,7 @@ func (d *DockerRuntime) Build(ctx context.Context, step *schema.BuildStep, prefi
 	}
 
 	imageID := strings.TrimSpace(string(imageIDBytes))
-	d.printer.Debug("docker_build_complete", map[string]any{
+	bus.DebugWithData("docker build complete", map[string]any{
 		"image":   step.Build.Image,
 		"imageID": imageID,
 	})
@@ -493,7 +513,6 @@ func (d *DockerRuntime) buildCommonRunArgs(step *schema.RunStep) []string {
 func (d *DockerRuntime) buildVolumeMount(ref schema.VolumeRef) string {
 	vol, ok := d.volumes[ref.Name]
 	if !ok {
-		d.printer.Warn("unknown_volume", map[string]any{"name": ref.Name})
 		return ""
 	}
 
@@ -658,14 +677,14 @@ func (d *DockerRuntime) buildBuildArgs(step *schema.BuildStep) []string {
 	return args
 }
 
-func (d *DockerRuntime) execDocker(ctx context.Context, op, prefix string, args ...string) error {
-	d.printer.Debug("docker_exec", map[string]any{
+func (d *DockerRuntime) execDocker(ctx context.Context, op, prefix string, bus *EventBus, args ...string) error {
+	bus.DebugWithData("docker exec", map[string]any{
 		"op":   op,
 		"args": args,
 	})
 	cmd := exec.CommandContext(ctx, "docker", args...)
-	outWriter := &linePrefixWriter{printer: d.printer, prefix: prefix, stream: "stdout"}
-	errWriter := &linePrefixWriter{printer: d.printer, prefix: prefix, stream: "stderr"}
+	outWriter := &linePrefixWriter{bus: bus, prefix: prefix, stream: "stdout"}
+	errWriter := &linePrefixWriter{bus: bus, prefix: prefix, stream: "stderr"}
 	cmd.Stdout, cmd.Stderr, cmd.Dir = outWriter, errWriter, d.workflowDir
 	if err := cmd.Run(); err != nil {
 		outWriter.Flush()

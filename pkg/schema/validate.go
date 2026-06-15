@@ -7,83 +7,6 @@ import (
 	"regexp"
 )
 
-// idPattern validates that IDs start with a letter or underscore and contain only
-// letters, underscores, and numbers.
-var idPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
-// ValidationError represents a validation error with a path to the invalid field
-type ValidationError struct {
-	Path    string
-	Message string
-}
-
-func (e ValidationError) Error() string {
-	if e.Path == "" {
-		return e.Message
-	}
-	return fmt.Sprintf("%s: %s", e.Path, e.Message)
-}
-
-// ValidationErrors is a collection of validation errors
-type ValidationErrors []ValidationError
-
-func (e ValidationErrors) Error() string {
-	if len(e) == 0 {
-		return ""
-	}
-	if len(e) == 1 {
-		return e[0].Error()
-	}
-	msg := fmt.Sprintf("%d validation errors:\n", len(e))
-	for _, err := range e {
-		msg += "  - " + err.Error() + "\n"
-	}
-	return msg
-}
-
-// ToError returns nil if there are no errors, otherwise returns the ValidationErrors
-func (e ValidationErrors) ToError() error {
-	if len(e) == 0 {
-		return nil
-	}
-	return e
-}
-
-// validator helps collect validation errors with path context
-type validator struct {
-	path   string
-	errors ValidationErrors
-}
-
-func newValidator() *validator {
-	return &validator{}
-}
-
-func (v *validator) withPath(path string) *validator {
-	newPath := path
-	if v.path != "" {
-		newPath = v.path + "." + path
-	}
-	return &validator{path: newPath, errors: v.errors}
-}
-
-func (v *validator) withIndex(index int) *validator {
-	newPath := fmt.Sprintf("%s[%d]", v.path, index)
-	return &validator{path: newPath, errors: v.errors}
-}
-
-func (v *validator) addError(msg string) {
-	v.errors = append(v.errors, ValidationError{Path: v.path, Message: msg})
-}
-
-func (v *validator) addErrorf(format string, args ...any) {
-	v.addError(fmt.Sprintf(format, args...))
-}
-
-func (v *validator) merge(other *validator) {
-	v.errors = append(v.errors, other.errors...)
-}
-
 // Validate validates the OCW schema and returns any validation errors
 func (o *OCW) Validate() error {
 	v := newValidator()
@@ -160,6 +83,83 @@ func (o *OCW) Validate() error {
 	}
 
 	return v.errors.ToError()
+}
+
+// idPattern validates that IDs start with a letter or underscore and contain only
+// letters, underscores, and numbers.
+var idPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// ValidationError represents a validation error with a path to the invalid field
+type ValidationError struct {
+	Path    string
+	Message string
+}
+
+func (e ValidationError) Error() string {
+	if e.Path == "" {
+		return e.Message
+	}
+	return fmt.Sprintf("%s: %s", e.Path, e.Message)
+}
+
+// ValidationErrors is a collection of validation errors
+type ValidationErrors []ValidationError
+
+func (e ValidationErrors) Error() string {
+	if len(e) == 0 {
+		return ""
+	}
+	if len(e) == 1 {
+		return e[0].Error()
+	}
+	msg := fmt.Sprintf("%d validation errors:\n", len(e))
+	for _, err := range e {
+		msg += "  - " + err.Error() + "\n"
+	}
+	return msg
+}
+
+// ToError returns nil if there are no errors, otherwise returns the ValidationErrors
+func (e ValidationErrors) ToError() error {
+	if len(e) == 0 {
+		return nil
+	}
+	return e
+}
+
+// validator helps collect validation errors with path context
+type validator struct {
+	path   string
+	errors ValidationErrors
+}
+
+func newValidator() *validator {
+	return &validator{}
+}
+
+func (v *validator) withPath(path string) *validator {
+	newPath := path
+	if v.path != "" {
+		newPath = v.path + "." + path
+	}
+	return &validator{path: newPath, errors: v.errors}
+}
+
+func (v *validator) withIndex(index int) *validator {
+	newPath := fmt.Sprintf("%s[%d]", v.path, index)
+	return &validator{path: newPath, errors: v.errors}
+}
+
+func (v *validator) addError(msg string) {
+	v.errors = append(v.errors, ValidationError{Path: v.path, Message: msg})
+}
+
+func (v *validator) addErrorf(format string, args ...any) {
+	v.addError(fmt.Sprintf(format, args...))
+}
+
+func (v *validator) merge(other *validator) {
+	v.errors = append(v.errors, other.errors...)
 }
 
 func (v *validator) validateJob(job *Job) {

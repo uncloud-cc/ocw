@@ -92,6 +92,10 @@ func MaskEvent(ev Event, secrets []string, showSecrets bool) Event {
 		e.Outputs = MaskStringMap(e.Outputs, secrets)
 	case *StepStart:
 		e.Extra = MaskStringMap(e.Extra, secrets)
+	case *ServicesOverview:
+		// Services contain infrastructure data, not user secrets.
+	case *Waiting:
+		// No secrets here.
 	}
 	return ev
 }

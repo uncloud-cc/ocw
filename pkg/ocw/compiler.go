@@ -152,14 +152,14 @@ func compileRunStep(s *schema.RunStep, exec Runtime, state *State, bus *EventBus
 			}
 
 			if s.Background {
-				_, err := exec.StartService(ctx, interpolatedSchema, prefix)
+				_, err := exec.StartService(ctx, interpolatedSchema, prefix, bus)
 				if err != nil {
 					return fmt.Errorf("Error while starting service %s: %v", name, err)
 				}
 				return nil
 			}
 
-			outputs, err := exec.Run(ctx, interpolatedSchema, prefix)
+			outputs, err := exec.Run(ctx, interpolatedSchema, prefix, bus)
 			if err != nil {
 				return fmt.Errorf("Error while running container %s: %v", name, err)
 			}
@@ -197,7 +197,7 @@ func compileBuildStep(s *schema.BuildStep, exec Runtime, state *State, bus *Even
 				return fmt.Errorf("Error while interpolating template value for step %s: %v", name, err)
 			}
 
-			outputs, err := exec.Build(ctx, interpolatedSchema, prefix)
+			outputs, err := exec.Build(ctx, interpolatedSchema, prefix, bus)
 			if err != nil {
 				return fmt.Errorf("Error while trying to run build step %s: %v", name, err)
 			}
@@ -407,7 +407,16 @@ type leafStep struct {
 
 func (s *leafStep) String() string { return s.name }
 func (s *leafStep) Do(ctx context.Context) error {
-	return s.do(ctx)
+	s.bus.Event(&StepStart{
+		Name:     s.name,
+		StepType: s.stepType,
+	})
+	err := s.do(ctx)
+	s.bus.Event(&StepComplete{
+		Name:    s.name,
+		Success: err == nil,
+	})
+	return err
 }
 
 // Creates a new copy of schema.RunStep with {{ template }} values interpolated
