@@ -316,13 +316,16 @@
         },
         "env": {
           "additionalProperties": {
-            "$ref": "#/$defs/EnvVar"
+            "type": "string"
           },
           "type": "object"
         },
+        "envFile": {
+          "$ref": "#/$defs/StringOrStringSlice"
+        },
         "secrets": {
           "additionalProperties": {
-            "$ref": "#/$defs/SecretValue"
+            "type": "string"
           },
           "type": "object"
         },
@@ -334,6 +337,9 @@
         },
         "build": {
           "$ref": "#/$defs/BuildConfig"
+        },
+        "volumes": {
+          "$ref": "#/$defs/VolumeRefs"
         }
       },
       "additionalProperties": false,
@@ -470,6 +476,9 @@
           },
           "type": "object"
         },
+        "volumes": {
+          "$ref": "#/$defs/VolumeRefs"
+        },
         "parallel": {
           "items": {
             "$ref": "#/$defs/Step"
@@ -487,12 +496,12 @@
         },
         "case": {
           "additionalProperties": {
-            "$ref": "#/$defs/StepOrSteps"
+            "$ref": "#/$defs/Step"
           },
           "type": "object"
         },
         "default": {
-          "$ref": "#/$defs/StepOrSteps"
+          "$ref": "#/$defs/Step"
         }
       },
       "additionalProperties": false,
@@ -541,6 +550,9 @@
           },
           "type": "object"
         },
+        "envFile": {
+          "$ref": "#/$defs/StringOrStringSlice"
+        },
         "secrets": {
           "additionalProperties": {
             "$ref": "#/$defs/SecretValue"
@@ -588,11 +600,17 @@
           "type": "object"
         },
         "env": {
-          "$ref": "#/$defs/StringMapOrSlice"
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "envFile": {
+          "$ref": "#/$defs/StringOrStringSlice"
         },
         "secrets": {
           "additionalProperties": {
-            "$ref": "#/$defs/SecretValue"
+            "type": "string"
           },
           "type": "object"
         },
@@ -632,9 +650,6 @@
         "watch": {
           "$ref": "#/$defs/Watch"
         },
-        "envFile": {
-          "$ref": "#/$defs/StringOrStringSlice"
-        },
         "cpus": {
           "$ref": "#/$defs/NumberOrString"
         },
@@ -660,6 +675,9 @@
         },
         "tty": {
           "type": "boolean"
+        },
+        "volumes": {
+          "$ref": "#/$defs/VolumeRefs"
         }
       },
       "additionalProperties": false,
@@ -715,6 +733,9 @@
           },
           "type": "object"
         },
+        "envFile": {
+          "$ref": "#/$defs/StringOrStringSlice"
+        },
         "secrets": {
           "additionalProperties": {
             "$ref": "#/$defs/SecretValue"
@@ -759,19 +780,6 @@
         },
         {
           "$ref": "#/$defs/SwitchStep"
-        }
-      ]
-    },
-    "StepOrSteps": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Step"
-        },
-        {
-          "items": {
-            "$ref": "#/$defs/Step"
-          },
-          "type": "array"
         }
       ]
     },
@@ -831,6 +839,9 @@
           },
           "type": "object"
         },
+        "envFile": {
+          "$ref": "#/$defs/StringOrStringSlice"
+        },
         "secrets": {
           "additionalProperties": {
             "$ref": "#/$defs/SecretValue"
@@ -848,12 +859,12 @@
         },
         "case": {
           "additionalProperties": {
-            "$ref": "#/$defs/StepOrSteps"
+            "$ref": "#/$defs/Step"
           },
           "type": "object"
         },
         "default": {
-          "$ref": "#/$defs/StepOrSteps"
+          "$ref": "#/$defs/Step"
         }
       },
       "additionalProperties": false,
@@ -862,6 +873,59 @@
         "switch",
         "case"
       ]
+    },
+    "Volume": {
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "readonly",
+            "readwrite"
+          ],
+          "default": "readonly"
+        },
+        "mountPath": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "path"
+      ]
+    },
+    "VolumeRef": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "mountPath": {
+          "type": "string"
+        },
+        "readonly": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name"
+      ]
+    },
+    "VolumeRefs": {
+      "items": {
+        "$ref": "#/$defs/VolumeRef"
+      },
+      "type": "array"
+    },
+    "Volumes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Volume"
+      },
+      "type": "object"
     },
     "Watch": {
       "properties": {
@@ -923,10 +987,10 @@
     },
     "WorkflowConfig": {
       "properties": {
-        "from": {
+        "uses": {
           "type": "string"
         },
-        "env": {
+        "inputs": {
           "additionalProperties": {
             "$ref": "#/$defs/EnvVar"
           },
@@ -945,7 +1009,7 @@
       "additionalProperties": false,
       "type": "object",
       "required": [
-        "from"
+        "uses"
       ]
     },
     "WorkflowStep": {
@@ -974,6 +1038,9 @@
             "$ref": "#/$defs/EnvVar"
           },
           "type": "object"
+        },
+        "envFile": {
+          "$ref": "#/$defs/StringOrStringSlice"
         },
         "secrets": {
           "additionalProperties": {
@@ -1019,15 +1086,9 @@
       },
       "type": "object"
     },
-    "env": {
+    "inputs": {
       "additionalProperties": {
         "$ref": "#/$defs/EnvVar"
-      },
-      "type": "object"
-    },
-    "secrets": {
-      "additionalProperties": {
-        "$ref": "#/$defs/SecretValue"
       },
       "type": "object"
     },
@@ -1036,6 +1097,9 @@
         "type": "string"
       },
       "type": "object"
+    },
+    "volumes": {
+      "$ref": "#/$defs/Volumes"
     },
     "jobs": {
       "$ref": "#/$defs/Jobs"
@@ -1057,12 +1121,12 @@
     },
     "case": {
       "additionalProperties": {
-        "$ref": "#/$defs/StepOrSteps"
+        "$ref": "#/$defs/Step"
       },
       "type": "object"
     },
     "default": {
-      "$ref": "#/$defs/StepOrSteps"
+      "$ref": "#/$defs/Step"
     }
   },
   "additionalProperties": false,

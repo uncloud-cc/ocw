@@ -17,7 +17,16 @@ schema:
 
 # Run tests
 test:
-	go test -race ./...
+	$(MAKE) test-unit & $(MAKE) test-integration & $(MAKE) test-e2e & wait
+
+test-unit:
+	go test ./pkg/...
+
+test-integration:
+	go test ./test/integration/...
+
+test-e2e:
+	go test ./test/e2e/...
 
 # Run linter
 lint:
@@ -46,10 +55,6 @@ coverage:
 # Run all checks
 check: fmt vet lint test
 	@echo "All checks passed"
-
-# Run integration tests
-integration-test:
-	go test -race -tags=integration ./...
 
 # Clean build artifacts
 clean:

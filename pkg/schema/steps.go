@@ -13,9 +13,12 @@ type StepBase struct {
 	// Config is optional step-level configuration
 	Config Config `yaml:"config,omitempty" json:"config,omitempty"`
 	// Env are optional environment variables
-	Env Env `yaml:"env,omitempty" json:"env,omitempty"`
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+	// EnvFile is one or more environment files from workspace
+	// Useful for config assembled by previous steps
+	EnvFile *StringOrStringSlice `yaml:"envFile,omitempty" json:"envFile,omitempty"`
 	// Secrets are optional secrets
-	Secrets Secrets `yaml:"secrets,omitempty" json:"secrets,omitempty"`
+	Secrets map[string]string `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	// Needs lists service IDs that must be healthy before this step runs.
 	// All services are implicitly available to all steps on the internal network.
 	// Use Needs only when this step must wait for specific services to be ready.
@@ -33,164 +36,18 @@ type OptionalStepBase struct {
 	// Config is optional step-level configuration
 	Config Config `yaml:"config,omitempty" json:"config,omitempty"`
 	// Env are optional environment variables
-	Env Env `yaml:"env,omitempty" json:"env,omitempty"`
+	Env Inputs `yaml:"env,omitempty" json:"env,omitempty"`
+	// EnvFile is one or more environment files from workspace
+	// Useful for config assembled by previous steps
+	EnvFile *StringOrStringSlice `yaml:"envFile,omitempty" json:"envFile,omitempty"`
 	// Secrets are optional secrets
 	Secrets Secrets `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	// Needs lists service IDs that must be healthy before this step runs.
 	Needs []string `yaml:"needs,omitempty" json:"needs,omitempty"`
 }
 
-// StringOrStringSlice can be either a single string or a slice of strings
-type StringOrStringSlice struct {
-	Single   *string
-	Multiple []string
-}
-
-// UnmarshalYAML implements custom unmarshaling for StringOrStringSlice
-func (s *StringOrStringSlice) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var single string
-	if err := unmarshal(&single); err == nil {
-		s.Single = &single
-		return nil
-	}
-
-	var multiple []string
-	if err := unmarshal(&multiple); err == nil {
-		s.Multiple = multiple
-		return nil
-	}
-
-	return nil
-}
-
-// MarshalYAML implements custom marshaling for StringOrStringSlice
-func (s StringOrStringSlice) MarshalYAML() (interface{}, error) {
-	if s.Single != nil {
-		return *s.Single, nil
-	}
-	return s.Multiple, nil
-}
-
-// StringMapOrSlice can be either a map[string]string or []string
-type StringMapOrSlice struct {
-	Map   map[string]string
-	Slice []string
-}
-
-// UnmarshalYAML implements custom unmarshaling for StringMapOrSlice
-func (s *StringMapOrSlice) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var m map[string]string
-	if err := unmarshal(&m); err == nil {
-		s.Map = m
-		return nil
-	}
-
-	var sl []string
-	if err := unmarshal(&sl); err == nil {
-		s.Slice = sl
-		return nil
-	}
-
-	return nil
-}
-
-// MarshalYAML implements custom marshaling for StringMapOrSlice
-func (s StringMapOrSlice) MarshalYAML() (interface{}, error) {
-	if s.Map != nil {
-		return s.Map, nil
-	}
-	return s.Slice, nil
-}
-
-// NumberOrString can be either a number or a string
-type NumberOrString struct {
-	Number *float64
-	String *string
-}
-
-// UnmarshalYAML implements custom unmarshaling for NumberOrString
-func (n *NumberOrString) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var num float64
-	if err := unmarshal(&num); err == nil {
-		n.Number = &num
-		return nil
-	}
-
-	var s string
-	if err := unmarshal(&s); err == nil {
-		n.String = &s
-		return nil
-	}
-
-	return nil
-}
-
-// MarshalYAML implements custom marshaling for NumberOrString
-func (n NumberOrString) MarshalYAML() (interface{}, error) {
-	if n.Number != nil {
-		return *n.Number, nil
-	}
-	return n.String, nil
-}
-
 // UlimitValue can be either a number or a "soft:hard" string
 type UlimitValue = NumberOrString
-
-// ParallelStep represents a step that runs steps in parallel
-type ParallelStep struct {
-	OptionalStepBase `yaml:",inline" json:",inline"`
-	// Parallel are the steps to run in parallel
-	Parallel []Step `yaml:"parallel" json:"parallel" jsonschema:"required"`
-}
-
-// SequenceStep represents a step that runs steps in sequence
-type SequenceStep struct {
-	OptionalStepBase `yaml:",inline" json:",inline"`
-	// Sequence are the steps to run in sequence
-	Sequence []Step `yaml:"sequence" json:"sequence" jsonschema:"required"`
-}
-
-// StepOrSteps can be a single step or an array of steps
-type StepOrSteps struct {
-	Single   *Step
-	Multiple []Step
-}
-
-// UnmarshalYAML implements custom unmarshaling for StepOrSteps
-func (s *StepOrSteps) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var single Step
-	if err := unmarshal(&single); err == nil {
-		s.Single = &single
-		return nil
-	}
-
-	var multiple []Step
-	if err := unmarshal(&multiple); err == nil {
-		s.Multiple = multiple
-		return nil
-	}
-
-	return nil
-}
-
-// MarshalYAML implements custom marshaling for StepOrSteps
-func (s StepOrSteps) MarshalYAML() (interface{}, error) {
-	if s.Single != nil {
-		return s.Single, nil
-	}
-	return s.Multiple, nil
-}
-
-// SwitchStep represents a step that switches on a value
-type SwitchStep struct {
-	OptionalStepBase `yaml:",inline" json:",inline"`
-	// Switch is the expression to switch on
-	Switch string `yaml:"switch" json:"switch" jsonschema:"required"`
-	// Case are the case branches
-	Case map[string]StepOrSteps `yaml:"case" json:"case" jsonschema:"required"`
-	// Default is the default branch
-	Default *StepOrSteps `yaml:"default,omitempty" json:"default,omitempty"`
-}
 
 // Step represents any step type (discriminated union)
 type Step struct {
@@ -296,4 +153,23 @@ func (s Step) MarshalYAML() (interface{}, error) {
 		return s.SwitchStep, nil
 	}
 	return nil, nil
+}
+
+// StepTypeInfo holds metadata for a step type that participates in the
+// discriminated union. It is used by schema generators to auto-register
+// all step definitions.
+type StepTypeInfo struct {
+	Name string
+	Type any
+}
+
+// StepTypes is the registry of all step types that appear in the Step
+// discriminated union. When adding a new step type, register it here.
+var StepTypes = []StepTypeInfo{
+	{Name: "RunStep", Type: RunStep{}},
+	{Name: "BuildStep", Type: BuildStep{}},
+	{Name: "ParallelStep", Type: ParallelStep{}},
+	{Name: "SequenceStep", Type: SequenceStep{}},
+	{Name: "WorkflowStep", Type: WorkflowStep{}},
+	{Name: "SwitchStep", Type: SwitchStep{}},
 }

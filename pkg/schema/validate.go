@@ -1,3 +1,4 @@
+// Package schema validation logic - see doc.go for package guidelines
 package schema
 
 import (
@@ -5,6 +6,84 @@ import (
 	"fmt"
 	"regexp"
 )
+
+// Validate validates the OCW schema and returns any validation errors
+func (o *OCW) Validate() error {
+	v := newValidator()
+
+	// Required fields
+	if o.SchemaVersion == "" {
+		v.withPath("schemaVersion").addError("is required")
+	}
+	if o.Name == "" {
+		v.withPath("name").addError("is required")
+	}
+
+	// ID validation
+	if o.ID != "" {
+		v.validateID("id", o.ID)
+	}
+
+	// Check flow types at top level
+	flowTypes := 0
+	if len(o.Parallel) > 0 {
+		flowTypes++
+	}
+	if len(o.Sequence) > 0 {
+		flowTypes++
+	}
+	if o.Switch != "" {
+		flowTypes++
+	}
+
+	// Must have either jobs or direct flow control (or both)
+	hasJobs := len(o.Jobs) > 0
+	hasDirectFlow := flowTypes > 0
+
+	if !hasJobs && !hasDirectFlow {
+		v.addError("must have either jobs or flow control (parallel, sequence, or switch)")
+	}
+
+	if flowTypes > 1 {
+		v.addError("must have only one of: parallel, sequence, or switch (found multiple)")
+	}
+
+	// Validate jobs
+	if hasJobs {
+		for jobID, job := range o.Jobs {
+			jv := v.withPath("jobs").withPath(jobID)
+
+			// Validate job ID format
+			if !idPattern.MatchString(jobID) {
+				jv.addErrorf("invalid job id %q: must start with letter or underscore and contain only letters, numbers, and underscores", jobID)
+			}
+
+			jv.validateJob(&job)
+			v.merge(jv)
+		}
+	}
+
+	// Validate direct flow control steps
+	if len(o.Parallel) > 0 {
+		for i, step := range o.Parallel {
+			sv := v.withPath("parallel").withIndex(i)
+			sv.validateStep(&step)
+			v.merge(sv)
+		}
+	}
+	if len(o.Sequence) > 0 {
+		for i, step := range o.Sequence {
+			sv := v.withPath("sequence").withIndex(i)
+			sv.validateStep(&step)
+			v.merge(sv)
+		}
+	}
+	if o.Switch != "" {
+		v.validateSwitchFlow(o.Switch, o.Case, o.Default)
+	}
+
+	return v.errors.ToError()
+}
 
 // idPattern validates that IDs start with a letter or underscore and contain only
 // letters, underscores, and numbers.
@@ -83,84 +162,6 @@ func (v *validator) merge(other *validator) {
 	v.errors = append(v.errors, other.errors...)
 }
 
-// Validate validates the OCW schema and returns any validation errors
-func (o *OCW) Validate() error {
-	v := newValidator()
-
-	// Required fields
-	if o.SchemaVersion == "" {
-		v.withPath("schemaVersion").addError("is required")
-	}
-	if o.Name == "" {
-		v.withPath("name").addError("is required")
-	}
-
-	// ID validation
-	if o.ID != "" {
-		v.validateID("id", o.ID)
-	}
-
-	// Check flow types at top level
-	flowTypes := 0
-	if len(o.Parallel) > 0 {
-		flowTypes++
-	}
-	if len(o.Sequence) > 0 {
-		flowTypes++
-	}
-	if o.Switch != nil {
-		flowTypes++
-	}
-
-	// Must have either jobs or direct flow control (or both)
-	hasJobs := len(o.Jobs) > 0
-	hasDirectFlow := flowTypes > 0
-
-	if !hasJobs && !hasDirectFlow {
-		v.addError("must have either jobs or flow control (parallel, sequence, or switch)")
-	}
-
-	if flowTypes > 1 {
-		v.addError("must have only one of: parallel, sequence, or switch (found multiple)")
-	}
-
-	// Validate jobs
-	if hasJobs {
-		for jobID, job := range o.Jobs {
-			jv := v.withPath("jobs").withPath(jobID)
-
-			// Validate job ID format
-			if !idPattern.MatchString(jobID) {
-				jv.addErrorf("invalid job id %q: must start with letter or underscore and contain only letters, numbers, and underscores", jobID)
-			}
-
-			jv.validateJob(&job)
-			v.merge(jv)
-		}
-	}
-
-	// Validate direct flow control steps
-	if len(o.Parallel) > 0 {
-		for i, step := range o.Parallel {
-			sv := v.withPath("parallel").withIndex(i)
-			sv.validateStep(&step)
-			v.merge(sv)
-		}
-	}
-	if len(o.Sequence) > 0 {
-		for i, step := range o.Sequence {
-			sv := v.withPath("sequence").withIndex(i)
-			sv.validateStep(&step)
-			v.merge(sv)
-		}
-	}
-	if o.Switch != nil {
-		v.validateSwitchFlow(o.Switch, o.Case, o.Default)
-	}
-
-	return v.errors.ToError()
-}
-
 func (v *validator) validateJob(job *Job) {
 	// Check flow types
 	flowTypes := 0
@@ -170,7 +171,7 @@ func (v *validator) validateJob(job *Job) {
 	if len(job.Sequence) > 0 {
 		flowTypes++
 	}
-	if job.Switch != nil {
+	if job.Switch != "" {
 		flowTypes++
 	}
 	if job.Step != nil {
@@ -198,7 +199,7 @@ func (v *validator) validateJob(job *Job) {
 			v.merge(sv)
 		}
 	}
-	if job.Switch != nil {
+	if job.Switch != "" {
 		v.validateSwitchFlow(job.Switch, job.Case, job.Default)
 	}
 	if job.Step != nil {
@@ -322,8 +323,8 @@ func (v *validator) validateSequenceStep(step *SequenceStep) {
 }
 
 func (v *validator) validateWorkflowStep(step *WorkflowStep) {
-	if step.Workflow.From == "" {
-		v.withPath("workflow.from").addError("is required")
+	if step.Workflow.Uses == "" {
+		v.withPath("workflow.uses").addError("is required")
 	}
 
 	// Validate inherit values if present
@@ -355,21 +356,21 @@ func (v *validator) validateSwitchStep(step *SwitchStep) {
 		v.withPath("case").addError("must have at least one case")
 	}
 
-	for caseName, caseSteps := range step.Case {
+	for caseName, caseStep := range step.Case {
 		cv := v.withPath("case").withPath(caseName)
-		cv.validateStepOrSteps(&caseSteps)
+		cv.validateStep(&caseStep)
 		v.merge(cv)
 	}
 
 	if step.Default != nil {
 		dv := v.withPath("default")
-		dv.validateStepOrSteps(step.Default)
+		dv.validateStep(step.Default)
 		v.merge(dv)
 	}
 }
 
-func (v *validator) validateSwitchFlow(switchExpr *string, cases map[string]StepOrSteps, defaultCase *StepOrSteps) {
-	if switchExpr == nil || *switchExpr == "" {
+func (v *validator) validateSwitchFlow(switchExpr string, cases map[string]Step, defaultCase *Step) {
+	if switchExpr == "" {
 		v.withPath("switch").addError("is required")
 	}
 
@@ -377,50 +378,22 @@ func (v *validator) validateSwitchFlow(switchExpr *string, cases map[string]Step
 		v.withPath("case").addError("must have at least one case")
 	}
 
-	for caseName, caseSteps := range cases {
+	for caseName, caseStep := range cases {
 		cv := v.withPath("case").withPath(caseName)
-		cv.validateStepOrSteps(&caseSteps)
+		cv.validateStep(&caseStep)
 		v.merge(cv)
 	}
 
 	if defaultCase != nil {
 		dv := v.withPath("default")
-		dv.validateStepOrSteps(defaultCase)
+		dv.validateStep(defaultCase)
 		v.merge(dv)
-	}
-}
-
-func (v *validator) validateStepOrSteps(sos *StepOrSteps) {
-	if sos.Single != nil {
-		v.validateStep(sos.Single)
-	} else if sos.Multiple != nil {
-		for i, s := range sos.Multiple {
-			sv := v.withIndex(i)
-			sv.validateStep(&s)
-			v.merge(sv)
-		}
-	} else {
-		v.addError("must have at least one step")
 	}
 }
 
 // ValidateAndParse parses YAML data and validates the result
 func ValidateAndParse(data []byte) (*OCW, error) {
 	ocw, err := Parse(data)
-	if err != nil {
-		return nil, fmt.Errorf("parse error: %w", err)
-	}
-
-	if err := ocw.Validate(); err != nil {
-		return nil, fmt.Errorf("validation error: %w", err)
-	}
-
-	return ocw, nil
-}
-
-// ValidateAndParseFile parses a YAML file and validates the result
-func ValidateAndParseFile(path string) (*OCW, error) {
-	ocw, err := ParseFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("parse error: %w", err)
 	}

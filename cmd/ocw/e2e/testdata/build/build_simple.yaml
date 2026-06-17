@@ -1,6 +1,0 @@
-name: Simple Build Test
-sequence:
-  - name: Build Container
-    build:
-      image: test-simple-build
-      dockerfile: Dockerfile

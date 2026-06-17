@@ -28,27 +28,14 @@ func main() {
 	// Generate schema from OCW struct
 	s := r.Reflect(&schema.OCW{})
 
-	// Manually add definitions for types that might not be traversed
-	// because they're only referenced in custom JSONSchema() methods
-	addDefinition(r, s, "RunStep", schema.RunStep{})
-	addDefinition(r, s, "BuildStep", schema.BuildStep{})
-	addDefinition(r, s, "ParallelStep", schema.ParallelStep{})
-	addDefinition(r, s, "SequenceStep", schema.SequenceStep{})
-	addDefinition(r, s, "WorkflowStep", schema.WorkflowStep{})
-	addDefinition(r, s, "SwitchStep", schema.SwitchStep{})
-	// TODO: StringInput, NumberInput, BooleanInput, ChoiceInput are not yet implemented
-	// addDefinition(r, s, "StringInput", schema.StringInput{})
-	// addDefinition(r, s, "NumberInput", schema.NumberInput{})
-	// addDefinition(r, s, "BooleanInput", schema.BooleanInput{})
-	// addDefinition(r, s, "ChoiceInput", schema.ChoiceInput{})
-	addDefinition(r, s, "BuildConfig", schema.BuildConfig{})
-	addDefinition(r, s, "WorkflowConfig", schema.WorkflowConfig{})
-	addDefinition(r, s, "InheritConfig", schema.InheritConfig{})
-	addDefinition(r, s, "BoolOrString", schema.BoolOrString{})
-	addDefinition(r, s, "BuildOutput", schema.BuildOutput{})
-	addDefinition(r, s, "BuildSecrets", schema.BuildSecrets{})
-	addDefinition(r, s, "Watch", schema.Watch{})
-	addDefinition(r, s, "WatchConfig", schema.WatchConfig{})
+	// Add definitions for step types that participate in the Step
+	// discriminated union. These types are only referenced via $ref in
+	// Step.JSONSchema() and are not traversed automatically by the
+	// reflector. Reflecting them also pulls in their nested types
+	// (e.g., BuildConfig, HealthCheck, Watch, etc.).
+	for _, stepType := range schema.StepTypes {
+		addDefinition(r, s, stepType.Name, stepType.Type)
+	}
 
 	// Set schema metadata
 	s.Version = "https://json-schema.org/draft/2020-12/schema"

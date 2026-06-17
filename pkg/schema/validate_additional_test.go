@@ -1,7 +1,6 @@
 package schema
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -120,7 +119,7 @@ jobs:
   test:
     sequence:
       - workflow:
-          from: ./other.yaml
+          uses: ./other.yaml
 `,
 			wantErr: false,
 		},
@@ -133,7 +132,7 @@ jobs:
   test:
     sequence:
       - workflow:
-          from: ./other.yaml
+          uses: ./other.yaml
           inherit:
             secrets: all
             env: none
@@ -174,11 +173,11 @@ jobs:
       - switch: ${{ env.MODE }}
         case:
           dev:
-            - image: alpine
-              run: echo dev
+            image: alpine
+            run: echo dev
           prod:
-            - image: alpine
-              run: echo prod
+            image: alpine
+            run: echo prod
 `,
 			wantErr: false,
 		},
@@ -193,11 +192,11 @@ jobs:
       - switch: ${{ env.MODE }}
         case:
           dev:
-            - image: alpine
-              run: echo dev
+            image: alpine
+            run: echo dev
         default:
-          - image: alpine
-            run: echo default
+          image: alpine
+          run: echo default
 `,
 			wantErr: false,
 		},
@@ -262,29 +261,6 @@ name: test
 			}
 		})
 	}
-}
-
-func TestValidateAndParseFile(t *testing.T) {
-	// Create a temp file for testing
-	content := `
-schemaVersion: v1
-name: test
-jobs:
-  test:
-    sequence:
-      - image: alpine
-        run: echo test
-`
-	tmpFile := t.TempDir() + "/test.yaml"
-	err := os.WriteFile(tmpFile, []byte(content), 0644)
-	assert.NoError(t, err)
-
-	_, err = ValidateAndParseFile(tmpFile)
-	assert.NoError(t, err)
-
-	// Test non-existent file
-	_, err = ValidateAndParseFile("/non/existent/file.yaml")
-	assert.Error(t, err)
 }
 
 func TestIsValidationError(t *testing.T) {
@@ -369,11 +345,11 @@ name: test
 switch: ${{ env.MODE }}
 case:
   dev:
-    - image: alpine
-      run: echo dev
+    image: alpine
+    run: echo dev
   prod:
-    - image: alpine
-      run: echo prod
+    image: alpine
+    run: echo prod
 `,
 			wantErr: false,
 		},
@@ -385,11 +361,11 @@ name: test
 switch: ${{ env.MODE }}
 case:
   dev:
-    - image: alpine
-      run: echo dev
+    image: alpine
+    run: echo dev
 default:
-  - image: alpine
-    run: echo fallback
+  image: alpine
+  run: echo fallback
 `,
 			wantErr: false,
 		},

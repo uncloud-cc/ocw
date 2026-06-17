@@ -150,18 +150,6 @@ func (BuildSecrets) JSONSchema() *jsonschema.Schema {
 	}
 }
 
-// JSONSchema implements jsonschema.JSONSchemaer for StepOrSteps
-// It produces a schema that accepts either a single step or array of steps
-func (StepOrSteps) JSONSchema() *jsonschema.Schema {
-	stepRef := &jsonschema.Schema{Ref: "#/$defs/Step"}
-	return &jsonschema.Schema{
-		AnyOf: []*jsonschema.Schema{
-			stepRef,
-			{Type: "array", Items: stepRef},
-		},
-	}
-}
-
 // JSONSchema implements jsonschema.JSONSchemaer for Step (discriminated union)
 // It produces a oneOf schema with all step type variants
 func (Step) JSONSchema() *jsonschema.Schema {

@@ -1,0 +1,29 @@
+# 13_env_secrets.yaml
+name: Inputs, secrets and outputs demo
+
+# inputs can be set in various ways - including as environment variables
+# through an .env file or by specifying a JSON file as input.
+inputs:
+  # Regular env vars (not masked in output)
+  DB_PORT: 8080
+  DB_USER: admin
+
+  # Secret env vars (marked with 'secret: true', masked in output)
+  DB_PASSWORD:
+    secret: true
+    default: givemeaccess  # Optional default value
+
+  API_KEY:
+    secret: true  # No default - must be set in .env
+
+outputs:
+  dsn: "psql://{{ env.DB_USER }}@{{ env.DB_PASSWORD }}:{{ env.DB_PORT }}/mytable"
+
+sequence:
+  - name: Show Values
+    image: alpine:latest
+    cmd: |
+      echo "DB port: {{ inputs.DB_PORT }}"
+      echo "DB user: {{ inputs.DB_USER }}"
+      echo "DB password: {{ secrets.DB_PASSWORD }}"
+      echo "API key: {{ secrets.API_KEY }}"

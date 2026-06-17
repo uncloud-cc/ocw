@@ -1,0 +1,10 @@
+schemaVersion: "0.1.0"
+name: Simple Helper Workflow
+sequence:
+  - name: Say Hello
+    image: alpine:latest
+    cmd: echo "Hello from imported workflow!"
+
+  - name: Current Directory
+    image: alpine:latest
+    cmd: pwd

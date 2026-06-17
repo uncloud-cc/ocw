@@ -1,4 +1,34 @@
+# Misc
+.DS_Store
+
+# ocw binary
 ocw
+
+# ocw code
 !/cmd/ocw
+!/pkg/ocw
+
 # Added by goreleaser init:
 dist/
+
+# Coverage files
+*.out
+*.cover
+*.cov
+coverage.html
+coverage.xml
+*.coverage
+
+# Hugo build artifacts
+.hugo_build.lock
+public/
+resources/
+
+# Node.js dependencies (for docs PostCSS)
+node_modules/
+package-lock.json
+/package.json
+!/docs/package.json
+
+# Redis dump files
+*.rdb

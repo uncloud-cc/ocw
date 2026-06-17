@@ -58,8 +58,8 @@ func (e EnvVar) MarshalYAML() (interface{}, error) {
 	return e.Value, nil
 }
 
-// Env is a map of environment variables
-type Env = map[string]EnvVar
+// Inputs is a map of workflow inputs & secrets
+type Inputs = map[string]EnvVar
 
 // SecureString represents an encrypted secret value
 type SecureString struct {

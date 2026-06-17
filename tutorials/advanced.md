@@ -76,19 +76,19 @@ sequence:
   - name: Run Tests in Parallel
     parallel:
       - name: Unit Tests
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Running unit tests..."
 
       - name: Integration Tests
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Running integration tests..."
 
       - name: Lint
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Running linter..."
 
   - name: Build
-    image: node:20-alpine
+    image: node:24-alpine
     cmd: echo "Building (only after all tests pass)..."
 
   - name: Deploy
@@ -205,29 +205,29 @@ jobs:
     name: Build the App
     sequence:
       - name: Install
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Installing dependencies..."
 
       - name: Build
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Building..."
 
   test:
     name: Run Tests
     parallel:
       - name: Unit Tests
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Running unit tests..."
 
       - name: Lint
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Running linter..."
 
   dev:
     name: Development Server
     sequence:
       - name: Start Dev
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Starting dev server on http://localhost:3000..."
 ```
 

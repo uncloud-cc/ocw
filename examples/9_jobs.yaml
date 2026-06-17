@@ -6,27 +6,27 @@ jobs:
     name: Build the App
     sequence:
       - name: Install
-        image: node:20-alpine
-        cmd: echo "Installing dependencies..."
+        image: node:24-alpine
+        cmd: echo "[{{ meta.job }}] Installing dependencies..."
 
       - name: Build
-        image: node:20-alpine
-        cmd: echo "Building..."
+        image: node:24-alpine
+        cmd: echo "[{{ meta.job }}] Building..."
 
   test:
     name: Run Tests
     parallel:
       - name: Unit Tests
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Running unit tests..."
 
       - name: Lint
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Running linter..."
 
   dev:
     name: Development Server
     sequence:
       - name: Start Dev
-        image: node:20-alpine
+        image: node:24-alpine
         cmd: echo "Starting dev server on http://localhost:3000..."

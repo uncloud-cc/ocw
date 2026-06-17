@@ -1,0 +1,26 @@
+name: Workflow Import Example
+sequence:
+  - name: Run local workflow
+    workflow:
+      uses: ./13_inputs.yaml
+      inputs:
+        DB_PORT: 1234
+      secrets:
+        API_KEY: "parent_workflow_api_key-123456789"
+
+  - name: Run remote workflow
+    workflow:
+      uses: uncloud-cc/ocw/examples/13_inputs.yaml#feat/tdd-based-rewrite
+      inputs:
+        DB_PORT: 5678
+      secrets:
+        API_KEY: "github-imported-workflow-567890"
+
+  - name: Run another remote workflow
+    workflow:
+      uses: uncloud-cc/ocw/examples/7_templates.yaml#feat/tdd-based-rewrite
+      inherit:
+        env: all
+      # inputs:
+      #   USER: Ada
+      #   HOME: HomeSweetHome

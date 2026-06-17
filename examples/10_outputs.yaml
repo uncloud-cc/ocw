@@ -9,14 +9,14 @@ sequence:
     image: alpine:latest
     cmd: |
       echo "version=1.0.0" >> $OUTPUTS
-      echo "Generated version"
+      echo "✅ Generated version"
 
   - name: Generate Build
     id: build
     image: alpine:latest
     cmd: |
       echo "timestamp=$(date -u +%Y-%m-%d)" >> $OUTPUTS
-      echo "Generated timestamp"
+      echo "✅ Generated timestamp"
 
   - name: Display Results
     image: alpine:latest
