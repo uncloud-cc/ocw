@@ -2,6 +2,8 @@ package ocw
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -172,4 +174,86 @@ func TestCollectEvents(t *testing.T) {
 	AssertContainsEvent(t, collector.Events, "step.start")
 	AssertContainsEvent(t, collector.Events, "container.output")
 	AssertContainsEvent(t, collector.Events, "step.complete")
+}
+
+type mockTB struct {
+	HelperCalled bool
+	FatalfMsg    string
+}
+
+func (m *mockTB) Helper()                        { m.HelperCalled = true }
+func (m *mockTB) Fatalf(msg string, args ...any) { m.FatalfMsg = fmt.Sprintf(msg, args...) }
+
+func TestAssertEventMatches(t *testing.T) {
+	events := []Event{
+		&StepStart{Name: "build", StepType: "run"},
+		&ContainerOutput{Step: "hello", Stream: "stdout", Line: "Hello World"},
+		&StepComplete{Name: "build", Success: true},
+		&WorkflowComplete{Name: "test", Success: false},
+	}
+
+	t.Run("fields only success", func(t *testing.T) {
+		AssertEventMatches(t, events, "step.complete", "", map[string]any{"Success": true})
+	})
+
+	t.Run("contains only success", func(t *testing.T) {
+		AssertEventMatches(t, events, "container.output", "World", nil)
+	})
+
+	t.Run("combined success", func(t *testing.T) {
+		AssertEventMatches(t, events, "container.output", "Hello", map[string]any{"Stream": "stdout"})
+	})
+
+	t.Run("no criteria success", func(t *testing.T) {
+		AssertEventMatches(t, events, "step.start", "", nil)
+	})
+
+	t.Run("fields only failure message", func(t *testing.T) {
+		m := &mockTB{}
+		AssertEventMatches(m, events, "workflow.complete", "", map[string]any{"Success": true})
+		if m.FatalfMsg == "" {
+			t.Fatal("expected Fatalf to be called")
+		}
+		want := `expected at least one "workflow.complete" event matching fields map[Success:true]`
+		if !strings.Contains(m.FatalfMsg, want) {
+			t.Fatalf("expected Fatalf message to contain %q, got:\n%s", want, m.FatalfMsg)
+		}
+	})
+
+	t.Run("contains only failure message", func(t *testing.T) {
+		m := &mockTB{}
+		AssertEventMatches(m, events, "container.output", "Goodbye", nil)
+		if m.FatalfMsg == "" {
+			t.Fatal("expected Fatalf to be called")
+		}
+		want := `expected at least one "container.output" event matching contains "Goodbye"`
+		if !strings.Contains(m.FatalfMsg, want) {
+			t.Fatalf("expected Fatalf message to contain %q, got:\n%s", want, m.FatalfMsg)
+		}
+	})
+
+	t.Run("combined failure message", func(t *testing.T) {
+		m := &mockTB{}
+		AssertEventMatches(m, events, "container.output", "Goodbye", map[string]any{"Success": true})
+		if m.FatalfMsg == "" {
+			t.Fatal("expected Fatalf to be called")
+		}
+		wantContains := `contains "Goodbye"`
+		wantFields := `fields map[Success:true]`
+		if !strings.Contains(m.FatalfMsg, wantContains) || !strings.Contains(m.FatalfMsg, wantFields) {
+			t.Fatalf("expected Fatalf message to contain both %q and %q, got:\n%s", wantContains, wantFields, m.FatalfMsg)
+		}
+	})
+
+	t.Run("no criteria failure message", func(t *testing.T) {
+		m := &mockTB{}
+		AssertEventMatches(m, events, "workflow.start", "", nil)
+		if m.FatalfMsg == "" {
+			t.Fatal("expected Fatalf to be called")
+		}
+		want := `expected at least one "workflow.start" event matching any`
+		if !strings.Contains(m.FatalfMsg, want) {
+			t.Fatalf("expected Fatalf message to contain %q, got:\n%s", want, m.FatalfMsg)
+		}
+	})
 }

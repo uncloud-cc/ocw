@@ -29,3 +29,6 @@ node_modules/
 package-lock.json
 /package.json
 !/docs/package.json
+
+# Redis dump files
+*.rdb

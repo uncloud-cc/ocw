@@ -37,19 +37,149 @@ func AssertContainsEvent(t testing.TB, events []Event, eventType string) {
 // contains substr in any of its relevant string fields.
 func AssertContainsEventWith(t testing.TB, events []Event, eventType string, substr string) {
 	t.Helper()
+	AssertEventMatches(t, events, eventType, substr, nil)
+}
+
+// AssertEventMatches asserts that at least one event of the given type matches
+// all provided criteria. If contains is non-empty, the event must contain that
+// substring in any of its string fields. If fields is non-empty, every key
+// must exactly match a struct field on the event (by name) with a value-equal
+// comparison (types are coerced for numeric fields).
+// EventAssertion describes a single assertion against a collected event list.
+type EventAssertion struct {
+	EventType string
+	Contains  string
+	Fields    map[string]any
+}
+
+// AssertEvents runs a slice of EventAssertions against a list of events.
+func AssertEvents(t testing.TB, events []Event, assertions []EventAssertion) {
+	t.Helper()
+	for _, a := range assertions {
+		AssertEventMatches(t, events, a.EventType, a.Contains, a.Fields)
+	}
+}
+
+type fatalHelper interface {
+	Helper()
+	Fatalf(format string, args ...any)
+}
+
+func AssertEventMatches(t fatalHelper, events []Event, eventType string, contains string, fields map[string]any) {
+	t.Helper()
 	filteredEvents := []Event{}
 	for _, ev := range events {
 		if ev.EventType() != eventType {
 			continue
 		}
-
 		filteredEvents = append(filteredEvents, ev)
 
-		if EventContains(ev, substr) {
+		if contains != "" && !EventContains(ev, contains) {
+			continue
+		}
+		if fieldsMatch(ev, fields) {
 			return
 		}
 	}
-	t.Fatalf("expected at least one %q event containing %q, instead got:\n%s", eventType, substr, formatEvents(filteredEvents))
+
+	var parts []string
+	if contains != "" {
+		parts = append(parts, fmt.Sprintf("contains %q", contains))
+	}
+	if len(fields) > 0 {
+		parts = append(parts, fmt.Sprintf("fields %v", fields))
+	}
+	criteria := "any"
+	if len(parts) > 0 {
+		criteria = strings.Join(parts, " and ")
+	}
+
+	t.Fatalf("expected at least one %q event matching %s, instead got:\n%s", eventType, criteria, formatEvents(filteredEvents))
+}
+
+// fieldsMatch checks whether all entries in fields match the corresponding
+// exported struct fields on ev by name. It supports bool, string, and numeric
+// types with cross-kind coercion (e.g. int == int64).
+func fieldsMatch(ev Event, fields map[string]any) bool {
+	if len(fields) == 0 {
+		return true
+	}
+	v := reflect.ValueOf(ev)
+	if v.Kind() == reflect.Ptr && !v.IsNil() {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return false
+	}
+	for fieldName, expected := range fields {
+		field := v.FieldByName(fieldName)
+		if !field.IsValid() || !field.CanInterface() {
+			return false
+		}
+		if !valuesEqual(field, expected) {
+			return false
+		}
+	}
+	return true
+}
+
+// valuesEqual compares a reflect.Value with an expected value, coercing
+// numeric types so that int, int64, float64, etc. can match each other.
+func valuesEqual(v reflect.Value, expected any) bool {
+	if !v.IsValid() {
+		return expected == nil
+	}
+	v = reflect.Indirect(v)
+
+	ev := reflect.ValueOf(expected)
+	if !ev.IsValid() {
+		return false
+	}
+	ev = reflect.Indirect(ev)
+
+	// Exact type match
+	if v.Type() == ev.Type() {
+		return reflect.DeepEqual(v.Interface(), ev.Interface())
+	}
+
+	// Numeric coercion
+	if isNumeric(v) && isNumeric(ev) {
+		return toFloat64(v) == toFloat64(ev)
+	}
+
+	// String comparison
+	if v.Kind() == reflect.String && ev.Kind() == reflect.String {
+		return v.String() == ev.String()
+	}
+
+	// Bool comparison
+	if v.Kind() == reflect.Bool && ev.Kind() == reflect.Bool {
+		return v.Bool() == ev.Bool()
+	}
+
+	return false
+}
+
+func isNumeric(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	}
+	return false
+}
+
+func toFloat64(v reflect.Value) float64 {
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return float64(v.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return float64(v.Uint())
+	case reflect.Float32, reflect.Float64:
+		return v.Float()
+	}
+	return 0
 }
 
 // formatEvents returns a human-readable string representation of a slice of events.
@@ -123,10 +253,6 @@ func reflectContains(v reflect.Value, substr string) bool {
 	}
 	return false
 }
-
-// ---------------------------------------------------------------------------
-// Event collector
-// ---------------------------------------------------------------------------
 
 // EventCollector consumes events from a channel and stores them in a list.
 type EventCollector struct {

@@ -27,6 +27,11 @@ type DockerRuntime struct {
 }
 
 func NewDockerRuntime(volumes schema.Volumes, workflowDir string, runID string) (*DockerRuntime, error) {
+	absWorkflowDir, err := filepath.Abs(workflowDir)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert workflowDir to absolute path: %w", err)
+	}
+
 	if _, err := exec.LookPath("docker"); err != nil {
 		return nil, fmt.Errorf("docker CLI not found in PATH")
 	}
@@ -50,7 +55,7 @@ func NewDockerRuntime(volumes schema.Volumes, workflowDir string, runID string) 
 	logCtx, logCancel := context.WithCancel(context.Background())
 	return &DockerRuntime{
 		volumes:     volumes,
-		workflowDir: workflowDir,
+		workflowDir: absWorkflowDir,
 		networkName: networkName,
 		logCtx:      logCtx,
 		logCancel:   logCancel,

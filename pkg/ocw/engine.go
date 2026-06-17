@@ -3,6 +3,7 @@ package ocw
 import (
 	"context"
 	"fmt"
+	"time"
 
 	flow "github.com/Azure/go-workflow"
 	"github.com/uncloud-cc/ocw/pkg/schema"
@@ -10,8 +11,9 @@ import (
 
 // EngineOptions allows injecting a custom Runtime and selecting a specific job.
 type EngineOptions struct {
-	Runtime Runtime // if nil, DockerRuntime is used
-	JobName string  // if empty, compiles the top-level flow
+	Runtime     Runtime  // if nil, DockerRuntime is used
+	JobName     string   // if empty, compiles the top-level flow
+	LoadedFiles []string // files loaded during setup (e.g. .env files)
 }
 
 // Engine encapsulates a compiled workflow, state, event bus, and runtime.
@@ -21,9 +23,11 @@ type Engine struct {
 	State    *State         // public so callers can read inputs, outputs, and runID
 	Workflow *flow.Workflow // public so callers can inspect the compiled graph
 
-	runtime Runtime
-	schema  *schema.OCW
-	baseDir string
+	runtime     Runtime
+	schema      *schema.OCW
+	baseDir     string
+	jobName     string
+	loadedFiles []string
 }
 
 // NewEngine creates an Engine from a parsed schema, a prepared state, and a base directory.
@@ -43,6 +47,9 @@ func NewEngine(
 	bus.SetSecrets(false, state.GetSecretValues())
 
 	state.Meta["name"] = schema.Name
+	if opts.JobName != "" {
+		state.Meta["job"] = opts.JobName
+	}
 	if state.Steps == nil {
 		state.Steps = make(map[string]map[string]string)
 	}
@@ -68,18 +75,43 @@ func NewEngine(
 	}
 
 	return &Engine{
-		Bus:      bus,
-		State:    state,
-		Workflow: workflow,
-		runtime:  runtime,
-		schema:   schema,
-		baseDir:  baseDir,
+		Bus:         bus,
+		State:       state,
+		Workflow:    workflow,
+		runtime:     runtime,
+		schema:      schema,
+		baseDir:     baseDir,
+		jobName:     opts.JobName,
+		loadedFiles: opts.LoadedFiles,
 	}, nil
 }
 
 // Run executes the pre-compiled workflow.
 func (e *Engine) Run(ctx context.Context) error {
-	return e.Workflow.Do(ctx)
+	name := e.schema.Name
+	if e.jobName != "" {
+		job := GetJob(e.schema, e.jobName)
+		if job != nil && job.Name != "" {
+			name = job.Name
+		} else {
+			name = e.jobName
+		}
+	}
+
+	e.Bus.Event(&WorkflowStart{
+		Name:        name,
+		Directory:   e.baseDir,
+		LoadedFiles: e.loadedFiles,
+	})
+	start := time.Now()
+	err := e.Workflow.Do(ctx)
+	duration := time.Since(start)
+	e.Bus.Event(&WorkflowComplete{
+		Name:       name,
+		Success:    err == nil,
+		DurationMs: duration.Milliseconds(),
+	})
+	return err
 }
 
 // ResolvedOutputs returns the resolved outputs for the compiled workflow.

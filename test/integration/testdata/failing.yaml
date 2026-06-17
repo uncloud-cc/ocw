@@ -1,0 +1,9 @@
+name: Failing workflow
+sequence:
+  - name: This step will fail
+    image: alpine:latest
+    cmd: echo "About to fail..." && exit 1
+
+  - name: This step should never run
+    image: alpine:latest
+    cmd: echo "This should not appear"

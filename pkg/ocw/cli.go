@@ -11,9 +11,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
-	flow "github.com/Azure/go-workflow"
 	"github.com/joho/godotenv"
 	"github.com/uncloud-cc/ocw/pkg/schema"
 )
@@ -22,18 +20,16 @@ import (
 
 // CLIOptions holds configuration for the CLI.
 type CLIOptions struct {
-	EnvFiles       []string
-	InputsFile     string
-	OutputsFile    string
-	JSONMode       bool
-	DebugMode      bool
-	ShowSecrets    bool
-	CIMode         bool
-	Stdout         io.Writer
-	Stderr         io.Writer
-	WorkingDir     string
-	Runtime        Runtime
-	DebugLogWriter io.Writer
+	EnvFiles    []string
+	InputsFile  string
+	OutputsFile string
+	DebugMode   bool
+	ShowSecrets bool
+	CIMode      bool
+	Stdout      io.Writer
+	Stderr      io.Writer
+	WorkingDir  string
+	Runtime     Runtime
 }
 
 // CLI orchestrates the entire workflow execution lifecycle.
@@ -57,13 +53,10 @@ func NewCLI(opts CLIOptions) *CLI {
 
 // Run executes the CLI with the given arguments.
 func (c *CLI) Run(ctx context.Context, args []string) error {
-	bus, cleanup, err := c.setupEventBus()
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
 	if len(args) == 0 {
+		bus := NewEventBus()
+		cleanup := c.setupEventBusConsumers(bus)
+		defer cleanup()
 		return c.listAllJobs(bus)
 	}
 
@@ -91,33 +84,48 @@ func (c *CLI) Run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	bus.SetSecrets(c.opts.ShowSecrets, secretValues)
 
 	exec, ciMode, err := c.buildRuntime(parsed, workflowDir, state.RunID)
 	if err != nil {
 		return err
 	}
-	defer exec.Close()
 
 	ctx, cancel := c.withSignalHandling(ctx)
 	defer cancel()
 
-	workflow, displayName, job, err := c.compileWorkflow(parsed, jobName, filePath, exec, state, bus, workflowDir)
-	if err != nil {
-		return err
+	if jobName == "" && !HasDirectFlow(parsed) {
+		if HasJobs(parsed) {
+			return c.listJobsInFile(filePath, parsed)
+		}
+		return fmt.Errorf("no workflow flow or jobs found in %s", filePath)
 	}
 
-	runErr, _ := c.executeWorkflow(ctx, workflow, displayName, filePath, jobName, workflowDir, loadedFiles, bus)
+	engine, err := NewEngine(parsed, state, workflowDir, EngineOptions{
+		Runtime:     exec,
+		JobName:     jobName,
+		LoadedFiles: loadedFiles,
+	})
+	if err != nil {
+		exec.Close()
+		return err
+	}
+	defer engine.Close()
 
-	rawOutputs := c.selectRawOutputs(parsed, jobName, job)
+	engine.Bus.SetSecrets(c.opts.ShowSecrets, secretValues)
+	cleanup := c.setupEventBusConsumers(engine.Bus)
+	defer cleanup()
+
+	runErr := engine.Run(ctx)
+
+	rawOutputs := c.selectRawOutputs(parsed, jobName)
 	if runErr == nil && len(rawOutputs) > 0 {
-		if err := c.resolveAndWriteOutputs(state, rawOutputs, bus); err != nil {
+		if err := c.resolveAndWriteOutputs(state, rawOutputs, engine.Bus); err != nil {
 			return err
 		}
 	}
 
 	if runErr == nil {
-		c.waitForServices(ctx, exec, ciMode, bus)
+		c.waitForServices(ctx, exec, ciMode, engine.Bus)
 	}
 
 	if runErr != nil {
@@ -126,50 +134,33 @@ func (c *CLI) Run(ctx context.Context, args []string) error {
 	return nil
 }
 
-// setupEventBus initializes the event bus and logging consumers.
-func (c *CLI) setupEventBus() (*EventBus, func(), error) {
-	bus := NewEventBus()
+// setupEventBusConsumers attaches logging consumers to an existing bus.
+func (c *CLI) setupEventBusConsumers(bus *EventBus) func() {
 	var wg sync.WaitGroup
 
-	jsonCh := bus.Subscribe(64)
-	var debugLogOut io.Writer
-	var debugLogFile *os.File
-	if c.opts.DebugLogWriter != nil {
-		debugLogOut = c.opts.DebugLogWriter
+	if c.opts.DebugMode {
+		jsonCh := bus.Subscribe(64)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l := NewJSONLogger(c.opts.Stdout)
+			l.Run(jsonCh)
+		}()
 	} else {
-		f, err := os.OpenFile("debug.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-		if err != nil {
-			return nil, nil, fmt.Errorf("cannot open debug.log: %v", err)
-		}
-		debugLogFile = f
-		debugLogOut = f
+		prettyCh := bus.Subscribe(64)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			p := NewPrettyPrinter(c.opts.Stdout)
+			p.Run(prettyCh)
+		}()
+		bus.Debug("Initialized pretty-printer")
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		l := NewJSONLogger(debugLogOut)
-		l.Run(jsonCh)
-	}()
-
-	prettyCh := bus.Subscribe(64)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		p := NewPrettyPrinter(c.opts.Stdout)
-		p.Run(prettyCh)
-	}()
-	bus.Debug("Initialized pretty-printer and JSON logger")
-
-	cleanup := func() {
+	return func() {
 		bus.Close()
 		wg.Wait()
-		if debugLogFile != nil {
-			debugLogFile.Close()
-		}
 	}
-
-	return bus, cleanup, nil
 }
 
 // resolveTarget determines the workflow file and optional job name from args.
@@ -299,62 +290,15 @@ func (c *CLI) withSignalHandling(ctx context.Context) (context.Context, context.
 	return ctx, cancel
 }
 
-// compileWorkflow turns the parsed schema into an executable workflow.
-// compileWorkflow turns the parsed schema into an executable workflow.
-func (c *CLI) compileWorkflow(parsed *schema.OCW, jobName, filePath string, exec Runtime, state *State, bus *EventBus, workflowDir string) (*flow.Workflow, string, *schema.Job, error) {
-	var job *schema.Job
-	displayName := parsed.Name
 
-	if jobName != "" {
-		job = GetJob(parsed, jobName)
-		if job == nil {
-			return nil, "", nil, fmt.Errorf("job %q not found in %s", jobName, filePath)
-		}
-		state.Meta["job"] = jobName
-		if job.Name != "" {
-			displayName = job.Name
-		} else {
-			displayName = jobName
-		}
-	} else {
-		if !HasDirectFlow(parsed) {
-			if HasJobs(parsed) {
-				return nil, "", nil, c.listJobsInFile(filePath, parsed)
-			}
-			return nil, "", nil, fmt.Errorf("no workflow flow or jobs found in %s", filePath)
-		}
-	}
-
-	workflow, err := Compile(parsed, jobName, exec, state, bus, workflowDir)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("compile: %w", err)
-	}
-
-	return workflow, displayName, job, nil
-}
-
-// executeWorkflow runs the compiled workflow and returns any error and duration.
-func (c *CLI) executeWorkflow(ctx context.Context, workflow *flow.Workflow, displayName, filePath, jobName, workflowDir string, loadedFiles []string, bus *EventBus) (error, time.Duration) {
-	bus.Event(&WorkflowStart{
-		Name:        displayName,
-		Directory:   workflowDir,
-		LoadedFiles: loadedFiles,
-	})
-	start := time.Now()
-	err := workflow.Do(ctx)
-	duration := time.Since(start)
-	bus.Event(&WorkflowComplete{
-		Name:       displayName,
-		Success:    err == nil,
-		DurationMs: duration.Milliseconds(),
-	})
-	return err, duration
-}
 
 // selectRawOutputs chooses the output map from either the job or the top-level schema.
-func (c *CLI) selectRawOutputs(parsed *schema.OCW, jobName string, job *schema.Job) map[string]string {
-	if jobName != "" && job != nil {
-		return job.Outputs
+func (c *CLI) selectRawOutputs(parsed *schema.OCW, jobName string) map[string]string {
+	if jobName != "" {
+		job := GetJob(parsed, jobName)
+		if job != nil {
+			return job.Outputs
+		}
 	}
 	return parsed.Outputs
 }
